@@ -1,0 +1,127 @@
+# ---- Python / Pytest ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+.pytest_cache/
+**/__pycache__/
+backend/tests/
+frontend/e2e/
+e2e/
+**/e2e/
+tests/
+**/tests/
+
+# ---- Node & Frontend Build Outputs ----
+node_modules/
+**/node_modules/
+dist/
+dist-ssr/
+**/dist/
+**/dist-ssr/
+.output/
+.vinxi/
+.tanstack/
+.nitro/
+**/.output/
+**/.vinxi/
+**/.tanstack/
+**/.nitro/
+
+# ---- Virtual Environments ----
+.venv/
+venv/
+env/
+ENV/
+**/venv/
+**/.venv/
+
+# ---- Environment & Secrets ----
+.env
+*.env
+.env.local
+.env.production
+.env.development
+!.env.example
+!.env.prod.example
+
+# ---- Local Databases & Vector Stores (Postgres is used in prod) ----
+*.db
+*.sqlite
+*.sqlite3
+oreon_phase2_dev.db
+data/chroma/
+**/chroma/
+**/qdrant/
+
+# ---- Generated Reports & Temporary Artifacts ----
+backend/data/report_*.pdf
+**/report_*.pdf
+*.tmp
+*.bak
+
+# ---- Test & Playwright Artifacts ----
+playwright-report/
+test-results/
+audit-shots/
+**/playwright-report/
+**/test-results/
+**/audit-shots/
+
+# ---- Editor / IDE / OS ----
+.idea/
+.vscode/
+.DS_Store
+.claude/
+Thumbs.db
+*.suo
+*.sln
+*.sw?
+
+# ---- Hackathon Audits & Phase Reports ----
+*_REPORT.md
+*_CERTIFICATION.md
+*_AUDIT.md
+*_REVIEW.md
+*_MAP.md
+PROJECT_STATUS.md
+PHASE6_*.md
+backend/*_PHASE*.md
+graphify-out/
+backend/audit_system.py
+backend/validate_chat.py
+backend/.env.bak
+backend/DECISION_PHASE3.md
+backend/INVESTIGATION_PHASE2.md
+
+# Frontend developer test scripts and logs
+frontend/browser-audit.mjs
+frontend/browser-interactions.mjs
+frontend/cmdtest.mjs
+frontend/detailtest.mjs
+frontend/final-verify.mjs
+frontend/thinktest.mjs
+frontend/resp.json
+frontend/dev.log
+frontend/C*vite-verify.log
+
+# Documentation folder
+docs/
+
+# Redundant developer docs
+SETUP.md
+CLAUDE.md
+DEMO_SCRIPT.md
+DEPLOY_CLOUD.md
+DEPLOY_ORACLE.md
+SUBMISSION.md
+deploy.sh
+render.yaml
+
+
+
+
+
+

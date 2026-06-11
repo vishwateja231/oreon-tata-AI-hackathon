@@ -1,0 +1,14 @@
+OREON Pump Maintenance Manual
+
+Scope: centrifugal and hydraulic pumps serving cooling water and hydraulic circuits.
+
+Normal operating envelope: stable suction pressure above 2.5 bar, discharge pressure within design
+range, vibration below 4.5 mm/s RMS, bearing temperature below 80 C, and no visible seal leakage.
+
+Pump cavitation indicators include low suction pressure, rattling or gravel-like sound, fluctuating
+discharge pressure, elevated vibration, mechanical seal wear, and impeller pitting. Response:
+inspect suction strainer, open suction valve fully, remove air ingress, validate NPSH margin, reduce
+speed temporarily, and inspect impeller and seal faces.
+
+Seal failure indicators include leakage rate growth, abrasive water contamination, shaft sleeve
+scoring, overheating, and pressure spikes. Replace seal faces, inspect sleeve, and flush circuit.

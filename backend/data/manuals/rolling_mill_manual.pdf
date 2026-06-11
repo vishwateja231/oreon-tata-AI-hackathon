@@ -1,0 +1,9 @@
+OREON Hot Strip Rolling Mill Maintenance Manual
+
+The hot strip rolling mill reduces thick steel slabs into thin coils at high temperatures (1100 C). The mill stand utilizes work rolls, backup rolls, hydraulic roll-gap cylinder actuators, and heavy-duty spindle couplings driven by the main motor through the reduction gearbox.
+
+Common failure modes: roll surface degradation (spalling, fire cracking, or thermal wear) causing surface defects on the steel strip; hydraulic cylinder seal failure causing roll gap control instability and strip thickness variation; roll neck bearing overheating from lubrication starvation or cooling water contamination; and spindle coupling misalignment causing high torque vibrations.
+
+Corrective actions: inspect rolls with ultrasonic testing during roll changes; replace rolls on schedule or immediately upon surface defect detection; inspect hydraulic cylinders for bypass leakage and replace rod seals; verify roll cooling spray nozzles are unclogged and operating at 6.0 bar; and verify automatic roll-gap leveling calibration before each rolling campaign.
+
+Roll-Gap Lubrication: roll neck bearings use mist lubrication. Continuous oil flow and air pressure must be verified. High temperature (above 85 C) indicates bearing wear or cooling water ingress.

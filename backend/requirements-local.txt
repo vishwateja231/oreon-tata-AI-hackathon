@@ -1,0 +1,38 @@
+# Local dev requirements — excludes optional heavy packages
+# Use this for running without Docker: pip install -r requirements-local.txt
+# sentence-transformers (PyTorch, ~2GB) skipped — set USE_BGE_EMBEDDINGS=false
+# psycopg2-binary skipped — using SQLite locally
+# deepgram-sdk skipped — voice agent optional for demo
+# google-generativeai skipped — Groq is primary LLM
+# reportlab skipped — PDF export optional
+
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart
+
+sqlalchemy==2.0.36
+alembic==1.14.0
+
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+
+networkx==3.4.2
+pandas==2.2.3
+scikit-learn==1.6.0
+numpy>=1.26.0
+
+groq>=0.9.0
+httpx==0.28.1
+requests>=2.32.0
+
+langgraph>=0.2.0
+langchain>=0.3.0
+langchain-community>=0.3.0
+
+qdrant-client>=1.9.0
+pypdf==5.1.0
+
+redis>=5.0.0
+slowapi>=0.1.9
+apscheduler==3.10.4

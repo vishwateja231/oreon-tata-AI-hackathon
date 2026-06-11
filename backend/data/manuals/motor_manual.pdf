@@ -1,0 +1,18 @@
+OREON Motor Maintenance Manual
+
+Scope: DC and AC drive motors used in conveyors, pumps, fans, and mill auxiliaries.
+
+Normal operating envelope: winding temperature below 80 C, bearing housing temperature below 75 C,
+vibration below 4.5 mm/s RMS, current below rated full-load current, and clean cooling passages.
+
+Bearing wear indicators include rising vibration, grinding noise, drive-end temperature increase,
+metallic particles in grease, axial looseness, and resonance near bearing defect frequencies.
+Recommended response: inspect lubricant condition, confirm alignment, capture vibration spectrum,
+replace affected bearing if raceway spalling is confirmed, and verify coupling balance.
+
+Motor overload indicators include current above rated load, thermal rise, low insulation resistance,
+repeated thermal trips, or driven equipment drag. Corrective actions include reducing load, checking
+VFD parameters, measuring winding resistance, inspecting terminals, and inspecting the driven asset.
+
+Cooling failure indicators include blocked fan guards, failed motor cooling fan, dust accumulation,
+high ambient temperature, and reduced air velocity across the frame.

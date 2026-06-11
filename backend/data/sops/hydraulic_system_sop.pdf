@@ -1,0 +1,12 @@
+SOP: Hydraulic System Pressure Loss, Fluid Contamination, and Pump Cavitation
+
+1. Notify the area supervisor and control room operator immediately.
+2. Monitor hydraulic pressure, pump temperature, and filter differential pressure via SCADA.
+3. If pressure drops below 120 bar or temperature exceeds 70 C, initiate a controlled shutdown.
+4. Perform Lockout/Tagout (LOTO) on the main pump motor and isolate accumulator pressure.
+5. Inspect the system for visible external leaks, burst hoses, and failing fittings.
+6. Verify reservoir fluid level and inspect for fluid foaming or cloudiness (water ingress).
+7. Check the indicator on the return-line filter; replace filter element if differential pressure exceeds 2.5 bar.
+8. If pump cavitation is suspected (high-pitched whining), inspect suction line strainer and pump coupling.
+9. Collect fluid sample for particle count analysis (ISO 4406) and water content testing.
+10. Restore system, bleed air from high points, re-pressurize accumulators, and verify pressure stability before restarting.

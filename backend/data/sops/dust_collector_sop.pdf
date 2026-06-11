@@ -1,0 +1,12 @@
+SOP: Dust Collector High Differential Pressure and Bag Leakage
+
+1. Notify utility area supervisor and environmental monitoring desk.
+2. Monitor the baghouse differential pressure (dP) and stack opacity readings on SCADA.
+3. If dP exceeds 180 mm H2O or opacity exceeds 10%, prepare for immediate isolation.
+4. Set the pulse-jet controller to continuous offline cleaning mode to clear filter bags.
+5. If dP does not drop, perform LOTO on the exhaust fan and isolate the compartment.
+6. Open the access hatch and perform visual inspection (or blacklight dye test) to identify torn bags.
+7. Replace damaged filter bags with spare Nomex media bags and secure the snap bands.
+8. Inspect hopper rotary valve operation and clear any bridged dust or build-up.
+9. Verify compressed air supply pressure is steady at 6.0 bar and solenoids are firing correctly.
+10. Close access hatches, remove LOTO, restart exhaust fan, and confirm dP is below 120 mm H2O.

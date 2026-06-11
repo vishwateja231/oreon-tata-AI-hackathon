@@ -1,0 +1,130 @@
+{
+  "nodes": [
+    {
+      "id": "Motor_M12",
+      "name": "Main Rolling Mill Drive",
+      "equipment_type": "Motor",
+      "criticality": "critical",
+      "production_line": "PL-1"
+    },
+    {
+      "id": "Conveyor_C7",
+      "name": "Raw Ore Belt Conveyor",
+      "equipment_type": "Conveyor",
+      "criticality": "high",
+      "production_line": "PL-1"
+    },
+    {
+      "id": "BlastFurnace_BF2",
+      "name": "Blast Furnace Hearth #2",
+      "equipment_type": "Blast Furnace",
+      "criticality": "critical",
+      "production_line": "PL-1"
+    },
+    {
+      "id": "Pump_P3",
+      "name": "Blast Furnace Cooling Pump",
+      "equipment_type": "Pump",
+      "criticality": "medium",
+      "production_line": "PL-2"
+    },
+    {
+      "id": "CoolingSystem_C1",
+      "name": "Closed-Loop Cooling Tower",
+      "equipment_type": "Cooling System",
+      "criticality": "high",
+      "production_line": "PL-2"
+    },
+    {
+      "id": "Fan_F2",
+      "name": "Induced Draft Combustion Fan",
+      "equipment_type": "Fan",
+      "criticality": "medium",
+      "production_line": "PL-3"
+    },
+    {
+      "id": "RollingMill_RM1",
+      "name": "Hot Strip Rolling Mill",
+      "equipment_type": "Rolling Mill",
+      "criticality": "critical",
+      "production_line": "PL-1"
+    },
+    {
+      "id": "Gearbox_G1",
+      "name": "Main Reduction Gearbox",
+      "equipment_type": "Gearbox",
+      "criticality": "high",
+      "production_line": "PL-1"
+    },
+    {
+      "id": "Crusher_CR1",
+      "name": "Primary Ore Crusher",
+      "equipment_type": "Crusher",
+      "criticality": "high",
+      "production_line": "PL-2"
+    },
+    {
+      "id": "DustCollector_DC1",
+      "name": "Baghouse Dust Collector",
+      "equipment_type": "Dust Collector",
+      "criticality": "low",
+      "production_line": "PL-3"
+    }
+  ],
+  "edges": [
+    {
+      "from": "Motor_M12",
+      "to": "Conveyor_C7",
+      "relation": "drives",
+      "description": "Motor M12 powers conveyor belt drive shaft"
+    },
+    {
+      "from": "Conveyor_C7",
+      "to": "BlastFurnace_BF2",
+      "relation": "feeds",
+      "description": "Conveyor C7 delivers ore charge to blast furnace feed system"
+    },
+    {
+      "from": "Crusher_CR1",
+      "to": "Conveyor_C7",
+      "relation": "feeds",
+      "description": "Crusher CR1 outputs sized ore onto conveyor C7"
+    },
+    {
+      "from": "Pump_P3",
+      "to": "CoolingSystem_C1",
+      "relation": "supplies",
+      "description": "Pump P3 circulates cooling water to cooling tower"
+    },
+    {
+      "from": "CoolingSystem_C1",
+      "to": "BlastFurnace_BF2",
+      "relation": "cools",
+      "description": "Cooling system C1 maintains blast furnace shell temperatures"
+    },
+    {
+      "from": "CoolingSystem_C1",
+      "to": "RollingMill_RM1",
+      "relation": "cools",
+      "description": "Cooling system C1 provides roll cooling water"
+    },
+    {
+      "from": "Gearbox_G1",
+      "to": "RollingMill_RM1",
+      "relation": "drives",
+      "description": "Gearbox G1 drives the hot strip rolling mill work rolls"
+    },
+    {
+      "from": "Fan_F2",
+      "to": "DustCollector_DC1",
+      "relation": "exhausts_through",
+      "description": "Fan F2 forces exhaust air through dust collector DC1"
+    },
+    {
+      "from": "Fan_F2",
+      "to": "BlastFurnace_BF2",
+      "relation": "exhausts",
+      "description": "Fan F2 failure blocks furnace combustion exhaust"
+    }
+  ]
+}

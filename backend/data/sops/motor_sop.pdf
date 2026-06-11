@@ -1,0 +1,10 @@
+SOP: Motor Overheating, Overload, and Bearing Vibration
+
+1. Notify area operator and maintenance supervisor.
+2. Confirm current, temperature, vibration, and noise values from SCADA and handheld instruments.
+3. If vibration exceeds critical limit or temperature exceeds 90 C, prepare controlled shutdown.
+4. Lock out and tag out the motor and driven equipment.
+5. Inspect cooling fan, vents, terminals, coupling, foundation bolts, and bearing housings.
+6. Collect grease or oil sample and vibration spectrum.
+7. Replace bearing or correct overload only after the deterministic root cause is confirmed.
+8. Restart under observation and record post-maintenance baseline.

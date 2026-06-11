@@ -1,0 +1,12 @@
+SOP: Rolling Mill Roll Gap Deviation, High Vibration, and Roll Neck Bearing Overheating
+
+1. Notify the rolling mill superintendent and the control room operators.
+2. Monitor roll-force cylinder pressure, roll-gap deviation, spindle vibration, and bearing temperatures.
+3. If roll gap deviation exceeds 0.2mm or roll neck bearing temperature exceeds 90 C, abort the current strip and stop the mill.
+4. Execute LOTO on the roll drive motor and isolate the roll-gap hydraulic power unit (HPU).
+5. Inspect the work roll and backup roll surfaces for visual marking, scaling, or fire-cracking.
+6. Verify hydraulic pressure stability and inspect roll-gap cylinders and servo valves for external oil leaks.
+7. Inspect the roll cooling headers and verify water spray coverage is uniform and nozzles are clear.
+8. Check roll neck bearing grease/mist lines and confirm no water contamination has occurred.
+9. Perform zero-calibration of the roll-gap sensors (load cells and transducer alignment).
+10. De-isolate, start roll drive under no-load, and run a test bar to confirm strip thickness and surface quality.

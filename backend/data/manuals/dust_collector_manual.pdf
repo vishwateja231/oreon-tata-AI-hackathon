@@ -1,0 +1,9 @@
+OREON Baghouse Dust Collector Maintenance Manual
+
+The baghouse dust collector captures particulate matter from furnace and mill exhaust gas streams using a matrix of fabric filter bags. System health is monitored via differential pressure (dP), exhaust stack opacity, hopper levels, pulse-jet cleaning air pressure, and fan motor current.
+
+Common failure modes: high differential pressure (dP > 150 mm H2O) caused by filter bag blinding, failed pulse-jet solenoids, or moisture condensation (dew point excursion); bag leakage or tear indicated by a sudden drop in dP and a spike in stack opacity; hopper blockage and dust bridging from failed rotary airlock valves or heating elements; and pulse-jet header pressure drop from compressed air leakage or valve diaphragm failure.
+
+Corrective actions: run the manual pulse cycle to clear heavy dust cakes; perform a dye test to locate torn filter bags and replace them; clean and clear rotary valves in the hopper discharge; inspect and replace pulse-jet solenoid valves and diaphragms; and ensure combustion gases are above dew point temperature before startup.
+
+Maintenance intervals: check pulse-jet manifold pressure daily (must be 5.5 to 6.2 bar); inspect bags for dust leakage monthly; measure exhaust fan bearing temperatures and vibrations quarterly.

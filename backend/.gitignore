@@ -1,0 +1,41 @@
+# Python environment
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.env
+tests/
+**/tests/
+e2e/
+**/e2e/
+
+# Database and state files
+*.db
+*.sqlite
+data/chroma/
+data/qdrant_storage/
+data/rul_model_*.pkl
+*.pkl
+*.joblib
+oreon_phase2_dev.db
+
+# Secrets — NEVER commit
+*.env.local
+.env.bak
+
+# Log files
+*.log
+*.err.log
+
+# Useless developer scripts and backups
+.env.bak
+audit_system.py
+validate_chat.py
+
+# Phase documents
+DECISION_PHASE3.md
+INVESTIGATION_PHASE2.md
+
