@@ -15,7 +15,7 @@ services:
     container_name: oreon_backend
     restart: always
     env_file:
-      - .env
+      - backend/.env
     expose:
       - "8000"           # internal only — nginx proxies, not exposed to host
     volumes:
