@@ -336,39 +336,33 @@ function SentinelPanel() {
         {/* Left side: Sentinel stats styled as high-fidelity telemetry grid */}
         <div className="col-span-12 lg:col-span-3 p-4 space-y-2.5">
           {sentinelStats.map(({ label, value, color }) => {
-            let borderCol = "border-cyan/20";
-            let bgCol = "bg-cyan/5";
-            if (color.includes("amber")) { borderCol = "border-amber-signal/20"; bgCol = "bg-amber-signal/5"; }
-            else if (color.includes("violet")) { borderCol = "border-violet/20"; bgCol = "bg-violet/5"; }
-            else if (color.includes("green")) { borderCol = "border-green-signal/20"; bgCol = "bg-green-signal/5"; }
+            let textClass = "text-cyan";
+            let Icon = Brain;
+            
+            if (color.includes("amber")) {
+              textClass = "text-amber-signal";
+              Icon = AlertTriangle;
+            } else if (color.includes("violet")) {
+              textClass = "text-violet";
+              Icon = Search;
+            } else if (color.includes("green")) {
+              textClass = "text-green-signal";
+              Icon = Shield;
+            }
             
             return (
-              <div key={label} className={`relative overflow-hidden rounded border ${borderCol} ${bgCol} p-3 flex flex-col justify-between min-h-[58px] transition-all duration-200 hover:scale-[1.01]`}>
-                {/* Colored glowing accent bar */}
-                <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${
-                  color.includes("amber") ? "bg-amber-signal" :
-                  color.includes("violet") ? "bg-violet" :
-                  color.includes("green") ? "bg-green-signal" : "bg-cyan"
-                }`} />
-                <div className="font-mono text-[9px] text-text-muted uppercase tracking-wider pl-1.5">{label}</div>
-                <div className="flex items-baseline justify-between pl-1.5">
-                  <span className={`font-mono text-[18px] font-bold tabular-nums ${
-                    color.includes("amber") ? "text-amber-signal" :
-                    color.includes("violet") ? "text-violet" :
-                    color.includes("green") ? "text-green-signal" : "text-cyan"
-                  }`}>{value}</span>
-                  <span className="relative flex size-1.5">
-                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                      color.includes("amber") ? "bg-amber-signal" :
-                      color.includes("violet") ? "bg-violet" :
-                      color.includes("green") ? "bg-green-signal" : "bg-cyan"
-                    }`}></span>
-                    <span className={`relative inline-flex rounded-full size-1.5 ${
-                      color.includes("amber") ? "bg-amber-signal" :
-                      color.includes("violet") ? "bg-violet" :
-                      color.includes("green") ? "bg-green-signal" : "bg-cyan"
-                    }`}></span>
-                  </span>
+              <div 
+                key={label} 
+                className="rounded-md border border-border bg-surface-2/40 p-3.5 flex flex-col justify-between min-h-[64px] transition-colors hover:bg-surface-1"
+              >
+                <div className="flex items-start justify-between mb-1.5">
+                  <div className="font-mono text-[10px] text-text-muted uppercase tracking-wider font-medium pr-2">
+                    {label}
+                  </div>
+                  <Icon className={`size-3.5 opacity-70 shrink-0 ${textClass}`} />
+                </div>
+                <div className={`font-mono text-[22px] font-semibold tabular-nums leading-none ${textClass}`}>
+                  {value}
                 </div>
               </div>
             );

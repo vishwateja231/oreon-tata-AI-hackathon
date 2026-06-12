@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -52,15 +52,17 @@ def export_plant_report(
     if format == "json":
         return JSONResponse(content=data)
 
+    # 3. Output as PDF
     pdf_stream = generate_plant_report_pdf(kind, data)
-    filename = f"oreon_{kind}_report_{_datetime_now_str()}.pdf"
-    return StreamingResponse(
-        pdf_stream,
+    filename = f"oreon_plant_{kind}_report_{_datetime_now_str()}.pdf"
+    
+    return Response(
+        content=pdf_stream.getvalue(),
         media_type="application/pdf",
         headers={
             "Content-Disposition": f"attachment; filename={filename}",
-            "Access-Control-Expose-Headers": "Content-Disposition",
-        },
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
     )
 
 
@@ -151,8 +153,8 @@ def export_maintenance_report(
     pdf_stream = generate_maintenance_pdf(report_data)
     filename = f"oreon_report_{asset_id}_{_datetime_now_str()}.pdf"
     
-    return StreamingResponse(
-        pdf_stream,
+    return Response(
+        content=pdf_stream.getvalue(),
         media_type="application/pdf",
         headers={
             "Content-Disposition": f"attachment; filename={filename}",
