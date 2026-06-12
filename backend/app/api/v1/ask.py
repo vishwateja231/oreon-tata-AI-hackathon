@@ -728,6 +728,9 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
     role_raw = (payload.role or "maintenance_engineer").lower().strip()
     role = role_raw if role_raw in VALID_ROLES else "maintenance_engineer"
 
+    # Define conv_id here so it can be used for cache hit persistence
+    conv_id = payload.conversation_id or f"CONV-{uuid4().hex[:12].upper()}"
+
     # Define cache client
     cache = get_cache()
     cache_key = _get_ask_cache_key(role, payload.query, payload.conversation_id)
@@ -736,6 +739,11 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
     cached_response = cache.get("llm", cache_key)
     if cached_response is not None:
         logger.info("Main ask endpoint cache HIT")
+        
+        # Override with current conversation_id
+        if isinstance(cached_response, dict):
+            cached_response["conversation_id"] = conv_id
+
         if isinstance(cached_response, dict) and "evidence" in cached_response:
             clean_evidence = []
             for ev in cached_response["evidence"]:
@@ -767,6 +775,25 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
             cached_response["evidence"] = _humobj(cached_response.get("evidence", []), _id2name)
             cached_response["reasoning"] = _humobj(cached_response.get("reasoning", []), _id2name)
 
+        # Persist cached response to database
+        conversation = db.get(Conversation, conv_id)
+        if not conversation:
+            conversation = Conversation(id=conv_id, title=payload.query[:60])
+            db.add(conversation)
+        elif not conversation.title:
+            conversation.title = payload.query[:60]
+            
+        user_msg = ConversationMessage(conversation_id=conv_id, role="user", content=payload.query)
+        assistant_content = f"Diagnosis: {cached_response.get('diagnosis', '')}\nRecommended: {cached_response.get('recommended', '')}"
+        assistant_msg = ConversationMessage(
+            conversation_id=conv_id, role="assistant",
+            content=assistant_content,
+            sources=json.dumps({"evidence": cached_response.get("evidence", []), "reasoning": cached_response.get("reasoning", []), "diagnosis": cached_response.get("diagnosis", ""), "recommended": cached_response.get("recommended", ""), "confidence": cached_response.get("confidence", 80.0), "critical": cached_response.get("critical", False)})
+        )
+        db.add(user_msg)
+        db.add(assistant_msg)
+        db.commit()
+
         if payload.stream:
             def cached_stream():
                 # Stream quick status updates for nice UX transitions
@@ -788,10 +815,8 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                 # Yield initial status immediately
                 yield f"data: {json.dumps({'type': 'status', 'message': 'Reviewing maintenance manuals...'})}\n\n"
 
-                role_raw = (payload.role or "maintenance_engineer").lower().strip()
-                role = role_raw if role_raw in VALID_ROLES else "maintenance_engineer"
-                conv_id = payload.conversation_id or f"CONV-{uuid4().hex[:12].upper()}"
-
+                # conv_id is already defined in the outer scope
+                
                 # Retrieve conversation history
                 history_messages = db.scalars(
                     select(ConversationMessage)
