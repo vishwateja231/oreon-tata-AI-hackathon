@@ -571,7 +571,7 @@ function AskPage() {
         // activeId to convId also guarantees we never desync to a stale chat.
         await Promise.all([
           refetchHistory(),
-          qc.fetchQuery({ queryKey: ["ask-messages", convId], queryFn: () => askApi.messages(convId) }),
+          qc.invalidateQueries({ queryKey: ["ask-messages", convId] }),
         ]);
         if (convId !== activeId) setActiveId(convId);
       }
