@@ -113,7 +113,7 @@ export function CognitionMapSVG() {
 
         {/* orbital rings */}
         {[R - 60, R, R + 70].map((r, i) => (
-          <circle key={i} cx={cx} cy={cy} r={r}
+          <circle key={i} cx={cx ?? 0} cy={cy ?? 0} r={r}
             fill="none" stroke="rgba(255,255,255,0.12)"
             strokeDasharray={i === 1 ? "1 0" : "2 8"} />
         ))}

@@ -120,7 +120,6 @@ function WarRoom() {
             <div className="flex flex-col items-end gap-1.5 shrink-0">
               <div className="flex items-center gap-2">
                 <Brain className="size-3.5 text-cyan" strokeWidth={1.5} />
-                <span className={`size-1.5 rounded-full ${s?.running ? "bg-ok" : "bg-text-muted"}`} />
                 <span className="font-mono text-[11px] text-text-secondary font-medium">
                   Sentinel {s?.running ? "online" : "idle"}
                 </span>

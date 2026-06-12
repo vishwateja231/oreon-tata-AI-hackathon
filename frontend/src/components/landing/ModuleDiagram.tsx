@@ -251,13 +251,13 @@ function TwinSVG() {
         return (
           <g key={i}>
             {hot && (
-              <circle cx={x as number} cy={y as number} r="24" fill="none" stroke={c as string} opacity="0.5">
-                <animate attributeName="r" values="20;30;20" dur="2.2s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.6;0.15;0.6" dur="2.2s" repeatCount="indefinite" />
+              <circle cx={(x as number) || 0} cy={(y as number) || 0} r="24" fill="none" stroke={c as string} opacity="0.5">
+                <animate attributeName="r" values="24;36;24" dur="2s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.5;0;0.5" dur="2s" repeatCount="indefinite" />
               </circle>
             )}
             <rect x={(x as number) - 16} y={(y as number) - 16} width="32" height="32" fill="#0a0a0b" stroke={c as string} />
-            <circle cx={x as number} cy={y as number} r="3.5" fill={c as string} />
+            <circle cx={(x as number) || 0} cy={(y as number) || 0} r="3.5" fill={c as string} />
             <text x={x as number} y={(y as number) + 38} textAnchor="middle" fontFamily="JetBrains Mono" fontSize="9"
               fill={hot ? (c as string) : "rgba(255,255,255,0.55)"}>{n as string}</text>
           </g>

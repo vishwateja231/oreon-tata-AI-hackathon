@@ -78,6 +78,7 @@ def get_activities(
     offset: int = Query(default=0),
     activity_type: Optional[str] = Query(default=None),
     asset_id: Optional[str] = Query(default=None),
+    exclude_routine: bool = Query(default=False),
 ):
     """Paginated list of sentinel activities."""
     query = select(SentinelActivity).order_by(desc(SentinelActivity.timestamp))
@@ -88,6 +89,8 @@ def get_activities(
             query = query.where(SentinelActivity.activity_type == atype)
         except ValueError:
             pass
+    elif exclude_routine:
+        query = query.where(SentinelActivity.activity_type != ActivityType.health_check)
 
     if asset_id:
         query = query.where(SentinelActivity.asset_id == asset_id)

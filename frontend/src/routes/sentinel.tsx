@@ -64,18 +64,21 @@ function SentinelCenter() {
   const status = useSentinelStatus();
   const stats = useSentinelStats();
   const timeline = useSentinelTimeline(30);
-  const activities = useSentinelActivities({ limit: 50 });
-  const triggerMutation = useTriggerSentinel();
   const [filterType, setFilterType] = useState<string>("all");
+  const queryFilters: Record<string, string | number> = { limit: 50 };
+  if (filterType !== "all") {
+    queryFilters.activity_type = filterType;
+  } else {
+    queryFilters.exclude_routine = "true";
+  }
+
+  const activities = useSentinelActivities(queryFilters);
+  const triggerMutation = useTriggerSentinel();
 
   const s = status.data;
   const st = stats.data;
 
-  const filteredActivities = (activities.data?.activities ?? []).filter((a) =>
-    filterType === "all"
-      ? a.activity_type !== "health_check"   // hide routine health-check noise by default
-      : a.activity_type === filterType
-  );
+  const filteredActivities = activities.data?.activities ?? [];
   const timelineEvents = (timeline.data ?? []).filter(e => e.type !== "health_check");
 
   return (
@@ -106,7 +109,6 @@ function SentinelCenter() {
         <div className="card-flat p-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className={`size-2 rounded-full ${s?.running ? "bg-ok" : "bg-text-muted"}`} />
               <span className="font-mono text-[11px] text-text-secondary">
                 {s?.running ? "Autonomous monitoring" : "Idle"}
               </span>

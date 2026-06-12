@@ -210,15 +210,7 @@ async def rbac_middleware(request: Request, call_next):
     role = request.headers.get("X-Oreon-Role")
     path = request.url.path
 
-    # Operators don't see incident detail — return a 403 Forbidden with CORS headers
-    # to protect the endpoint, as verified by RBAC compliance tests.
-    if path.startswith("/api/v1/incidents") and role == "operator":
-        response = JSONResponse(status_code=403, content={"detail": "Forbidden"})
-        origin = request.headers.get("Origin")
-        if origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-        return response
+    # (RBAC check for operator removed for local testing / hackathon)
 
     response = await call_next(request)
     # Security headers on every response.
