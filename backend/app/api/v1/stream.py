@@ -41,4 +41,6 @@ def stream_sensors(db: Session = Depends(get_db)):
         finally:
             logger.info("SSE client disconnected.")
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    response = StreamingResponse(event_generator(), media_type="text/event-stream")
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    return response
