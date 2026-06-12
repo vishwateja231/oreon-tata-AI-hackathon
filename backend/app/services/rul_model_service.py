@@ -30,7 +30,6 @@ class RulModelService:
         """Construct the training dataset and fit the RandomForestRegressor."""
         logger.info("Initializing RUL Machine Learning Model...")
         try:
-            import pandas as pd
             from sklearn.ensemble import RandomForestRegressor
 
             # 1. Fetch all assets
