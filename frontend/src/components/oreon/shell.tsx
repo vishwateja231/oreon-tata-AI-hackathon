@@ -513,6 +513,11 @@ export function Shell({ children, title, subtitle }: { children: ReactNode; titl
                       {...linkProps}
                       title={sidebarCollapsed ? item.label : undefined}
                       className="block"
+                      onClick={(e) => {
+                        if (item.to === "/app/ask" && pathname === "/app/ask") {
+                          window.dispatchEvent(new Event("oreon:new-chat"));
+                        }
+                      }}
                     >
                       {navContent}
                     </Link>

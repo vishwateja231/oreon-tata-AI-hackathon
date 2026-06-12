@@ -454,6 +454,20 @@ function AskPage() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleNewChat = () => startNew();
+    window.addEventListener("oreon:new-chat", handleNewChat);
+    return () => window.removeEventListener("oreon:new-chat", handleNewChat);
+  }, []);
+
   // Track pending state including which pins were active when message was sent
   const [pendingUserMsg, setPendingUserMsg] = useState<string | null>(null);
   const [pendingPins, setPendingPins] = useState<Pin[]>([]);
@@ -856,6 +870,7 @@ function AskPage() {
     setStreamingStatus(undefined);
     setSendError(null);
     setExpanded({});
+    navigate({ to: "/app/ask", replace: true });
   }
 }
 
