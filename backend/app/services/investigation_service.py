@@ -60,6 +60,14 @@ class InvestigationService:
         self.incident_retrieval_service = IncidentRetrievalService(db)
         self.feedback_learning_service = FeedbackLearningService(db)
 
+    def investigate(self, request: InvestigationRequest) -> InvestigationReport:
+        import json
+        for chunk in self.investigate_stream(request):
+            data = json.loads(chunk.strip())
+            if data.get("progress") == "COMPLETE":
+                return InvestigationReport(**data["report"])
+        raise RuntimeError("Failed to generate investigation report")
+
     def investigate_stream(self, request: InvestigationRequest):
         import json
         import time

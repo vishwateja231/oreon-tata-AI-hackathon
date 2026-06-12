@@ -53,7 +53,12 @@ def get_status(db: Session = Depends(get_db)):
         # If DB has data, there was at least 1 scan
         total_db = db.scalar(select(func.count()).select_from(SentinelActivity)) or 0
         if total_db > 0:
-            scan_count = max(1, scan_count)
+            health_checks = db.scalar(
+                select(func.count()).select_from(SentinelActivity)
+                .where(SentinelActivity.activity_type == ActivityType.health_check)
+            ) or 0
+            # Estimate from health checks (1 per asset per scan)
+            scan_count = max(1, health_checks // max(assets_monitored, 1))
 
     return {
         "running": SentinelState.running or scan_count > 0,
@@ -140,12 +145,20 @@ def get_stats(db: Session = Depends(get_db)):
     alerts = type_counts.get("alert_created", 0)
     success_rate = alerts / max(investigations, 1)
 
+    # Estimate scan count from health checks if in-memory is 0
+    scan_count = SentinelState.scan_count
+    if scan_count == 0 and total > 0:
+        health_checks = type_counts.get("health_check", 0)
+        from app.models.asset import Asset
+        assets_monitored = db.scalar(select(func.count()).select_from(Asset)) or 10
+        scan_count = max(1, health_checks // max(assets_monitored, 1))
+
     return {
         "total_activities": total,
         "by_type": type_counts,
         "average_confidence": round(float(avg_confidence), 3),
         "success_rate": round(success_rate, 3),
-        "scan_count": max(SentinelState.scan_count, 1 if total > 0 else 0),
+        "scan_count": max(scan_count, 1 if total > 0 else 0),
         "running": SentinelState.running or total > 0,
     }
 

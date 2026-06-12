@@ -486,20 +486,20 @@ function AssetDetail() {
           <span>80% Confidence Interval Bounds:</span>
           <span>{rulLower.toFixed(0)} to {rulUpper.toFixed(0)} Days</span>
         </div>
-        <div className="relative pt-2">
-          <div className="overflow-hidden h-2.5 text-xs flex rounded bg-surface-2 relative">
+        <div className="relative pt-2 pb-1">
+          <div className="h-2.5 w-full rounded bg-surface-2 relative">
             <div
               style={{
-                marginLeft: `${(rulLower / 120) * 100}%`,
-                width: `${((rulUpper - rulLower) / 120) * 100}%`
+                left: `${Math.min(100, Math.max(0, (rulLower / 120) * 100))}%`,
+                width: `${Math.min(100, Math.max(0, ((rulUpper - rulLower) / 120) * 100))}%`
               }}
-              className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500/35"
+              className="absolute top-0 bottom-0 rounded bg-purple-500/35"
             />
             <div
               style={{
-                left: `${(asset.rul / 120) * 100}%`
+                left: `${Math.min(100, Math.max(0, (asset.rul / 120) * 100))}%`
               }}
-              className="absolute size-3 -top-0.5 rounded-full bg-purple-500 border border-white"
+              className="absolute size-3 -top-[1px] -translate-x-1/2 rounded-full bg-purple-500 border-[1.5px] border-surface shadow-sm"
             />
           </div>
         </div>
@@ -1166,7 +1166,7 @@ function Alternate({ title, meta, bad }: { title: string; meta: string; bad?: bo
     <div className="card-flat p-3 mb-2">
       <div className="flex items-center justify-between">
         <div className="text-[13px]">{title}</div>
-        <button className="font-mono text-[11px] text-cyan hover:underline cursor-pointer">Simulate →</button>
+        <Link to="/simulator" className="font-mono text-[11px] text-cyan hover:underline cursor-pointer">Simulate →</Link>
       </div>
       <div className={"text-[11px] mt-1 " + (bad ? "text-crit" : "text-text-muted")}>{meta}</div>
     </div>

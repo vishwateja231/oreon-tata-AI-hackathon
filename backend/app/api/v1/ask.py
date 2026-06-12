@@ -1189,9 +1189,7 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                         logger.error("Streaming ask LLM failure: %s — falling back to deterministic response", exc)
                         yield f"data: {json.dumps({'type': 'status', 'message': 'Generating response from plant data...'})}\n\n"
 
-                if not stream_success and has_grounding and not settings.OPENROUTER_API_KEY and not settings.GROQ_API_KEY:
-                    yield f"data: {json.dumps({'type': 'error', 'message': 'AI is not configured (OPENROUTER_API_KEY/GROQ_API_KEY missing).'})}\n\n"
-                    return
+
 
                 if not stream_success:
                     # Deterministic fallback logic
