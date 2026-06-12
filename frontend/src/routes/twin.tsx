@@ -17,8 +17,8 @@ import {
   Box,
   Grid3X3,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Plant3D } from "@/components/oreon/plant-3d";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+const Plant3D = lazy(() => import("@/components/oreon/plant-3d").then((m) => ({ default: m.Plant3D })));
 import { Shell } from "@/components/oreon/shell";
 import { useAssets, usePlantGraph, useSpares, useLogbook } from "@/lib/api/hooks";
 import { reportApi } from "@/lib/api/endpoints";
@@ -290,7 +290,9 @@ function Twin() {
             <div ref={containerRef} className="flex-1 relative overflow-hidden min-h-0">
               {is3D ? (
                 <div className="absolute inset-0">
-                  <Plant3D assets={assets} edges={edges} mode={mode} selected={selected} onSelect={setSelected} downstreamList={downstreamList} />
+                  <Suspense fallback={<div className="flex h-full w-full items-center justify-center font-mono text-xs text-text-muted">Initializing 3D Engine...</div>}>
+                    <Plant3D assets={assets} edges={edges} mode={mode} selected={selected} onSelect={setSelected} downstreamList={downstreamList} />
+                  </Suspense>
                 </div>
               ) : (
                 /* ─── 2D SVG View ─── */

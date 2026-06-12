@@ -60,16 +60,28 @@ class InvestigationService:
         self.incident_retrieval_service = IncidentRetrievalService(db)
         self.feedback_learning_service = FeedbackLearningService(db)
 
-    def investigate(self, request: InvestigationRequest) -> InvestigationReport:
+    def investigate_stream(self, request: InvestigationRequest):
+        import json
+        import time
         asset = self.asset_service.get_by_id(request.asset_id)
         if not asset:
             raise ValueError(f"Asset '{request.asset_id}' not found")
 
         logger.info("Starting investigation for asset %s", asset.id)
+        yield json.dumps({"progress": "Loading Asset"}) + "\n"
+        time.sleep(0.4)
+        
+        yield json.dumps({"progress": "Analyzing Sensors"}) + "\n"
         sensor_history = self.sensor_service.get_by_asset(asset.id, limit=250)
         sensor_analysis = self.sensor_engine.analyze_sensor_snapshot(request.sensor_snapshot)
         trend_summary = self.sensor_engine.analyze_sensor_trends(sensor_history)
         sensor_analysis.trend_summary = trend_summary
+
+        yield json.dumps({"progress": "Searching Manuals"}) + "\n"
+        time.sleep(0.6)
+        yield json.dumps({"progress": "Searching SOPs"}) + "\n"
+        time.sleep(0.6)
+        yield json.dumps({"progress": "Searching Historical Incidents"}) + "\n"
 
         retrieval_query = self._build_query(asset, request)
         retrieval = self.dual_retrieval_service.retrieve(
@@ -82,6 +94,7 @@ class InvestigationService:
         manual_chunks = [chunk for chunk in procedural if "manual" in chunk.source_document.lower()]
         sop_chunks = [chunk for chunk in procedural if "sop" in chunk.source_document.lower()]
 
+        yield json.dumps({"progress": "Running Root Cause Analysis"}) + "\n"
         root_cause = self.root_cause_engine.analyze(
             asset_type=asset.equipment_type,
             fault_description=request.fault_description,
@@ -96,6 +109,8 @@ class InvestigationService:
 
         learning_signals = self._build_learning_signals(asset, root_cause, historical)
 
+        yield json.dumps({"progress": "Generating Evidence"}) + "\n"
+        time.sleep(0.5)
         evidence = self.evidence_engine.build_evidence(
             sensor_analysis=sensor_analysis,
             manual_chunks=manual_chunks,
@@ -135,6 +150,9 @@ class InvestigationService:
             conf = 80.0
             rul_lower = max(1.0, pred_rul * 0.7)
             rul_upper = pred_rul * 1.3
+
+        yield json.dumps({"progress": "Building Report"}) + "\n"
+        time.sleep(0.5)
 
         report = InvestigationReport(
             asset_id=asset.id,
@@ -179,7 +197,7 @@ class InvestigationService:
         except Exception as exc:
             logger.warning("Failed to auto-log investigation: %s", exc)
 
-        return report
+        yield json.dumps({"progress": "COMPLETE", "report": report.model_dump()}) + "\n"
 
     def _build_query(self, asset: Asset, request: InvestigationRequest) -> str:
         snapshot = request.sensor_snapshot.model_dump(exclude_none=True)

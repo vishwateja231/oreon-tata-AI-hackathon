@@ -1005,21 +1005,30 @@ function Command() {
               </div>
             </div>
             <div className="col-span-12 lg:col-span-5 relative flex flex-col justify-center items-center">
-              <div className="relative size-48">
+
+              
+              <div className="relative size-44">
                 <svg viewBox="0 0 160 160" className="size-full -rotate-90">
-                  <circle cx="80" cy="80" r="64" fill="none" stroke="var(--color-border)" strokeWidth="9" />
+                  {/* Track background */}
+                  <circle cx="80" cy="80" r="72" fill="none" stroke="var(--color-surface-2)" strokeWidth="3" />
+                  {/* Decorative dashed inner track */}
+                  <circle cx="80" cy="80" r="63" fill="none" stroke="var(--color-border)" strokeWidth="1" strokeDasharray="2 4" opacity={0.6} />
+                  
+                  {/* Main Progress Indicator */}
                   <circle
-                    cx="80" cy="80" r="64" fill="none" stroke={ringHex} strokeWidth="9" strokeLinecap="round"
-                    strokeDasharray={`${(oee / 100) * RING_C} ${RING_C}`}
-                    style={{ filter: `drop-shadow(0 0 7px ${ringHex}66)` }}
+                    cx="80" cy="80" r="72" fill="none" stroke={ringHex} strokeWidth="4" strokeLinecap="round"
+                    strokeDasharray={`${(oee / 100) * (2 * Math.PI * 72)} ${2 * Math.PI * 72}`}
+                    className="transition-all duration-1000 ease-out"
                   />
                 </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="font-mono text-[42px] font-bold leading-none" style={{ color: ringHex }}>{oee}%</span>
-                  <span className="font-mono text-[10px] text-text-muted mt-1 tracking-widest uppercase">OEE Index</span>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pt-1">
+                  <span className="font-mono text-[42px] font-bold leading-none tracking-tighter text-foreground">
+                    {oee}<span className="text-[20px] text-text-muted ml-0.5 font-normal">%</span>
+                  </span>
+                  <span className="font-mono text-[9px] text-text-muted mt-2 tracking-[0.2em] uppercase">OEE Index</span>
                   <span
-                    className="mt-2.5 font-mono text-[9px] px-2.5 py-0.5 rounded-full uppercase tracking-wider"
-                    style={{ color: ringHex, background: `${ringHex}1a`, border: `1px solid ${ringHex}33` }}
+                    className="mt-3 font-mono text-[9px] px-3 py-1 rounded uppercase tracking-widest backdrop-blur-sm transition-colors"
+                    style={{ color: ringHex, background: `${ringHex}15`, border: `1px solid ${ringHex}30` }}
                   >
                     {ringLabel}
                   </span>

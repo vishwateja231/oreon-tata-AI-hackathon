@@ -4,7 +4,8 @@ import { Activity, BookOpen, Brain, CheckCircle2, FileSearch, History, Play, Spa
 import { useEffect, useMemo, useState } from "react";
 import { Shell, PanelHeader } from "@/components/oreon/shell";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAssets, useInvestigate, useInvestigationTimeline, useActiveRole } from "@/lib/api/hooks";
+import { useAssets, useInvestigationTimeline, useActiveRole } from "@/lib/api/hooks";
+import { investigationApi } from "@/lib/api/endpoints";
 import { statusBg, statusColor, toUiAsset } from "@/lib/oreon-data";
 import { useOREONContext } from "@/lib/context-store";
 import { z } from "zod";
@@ -24,7 +25,6 @@ function Investigations() {
   const { data: raw = [] } = useAssets();
   const assets = useMemo(() => raw.map(toUiAsset), [raw]);
   const timeline = useInvestigationTimeline();
-  const investigate = useInvestigate();
 
   const [assetId, setAssetId] = useState(initialAssetId);
   const subject = assets.find((a) => a.id === assetId) ?? assets[0];
@@ -47,23 +47,43 @@ function Investigations() {
   ]).slice(0, 6);
 
   const [step, setStep] = useState(stages.length);
-  useEffect(() => {
-    if (!investigate.isPending) return;
-    setStep(0);
-    const t = setInterval(() => setStep((s) => Math.min(stages.length, s + 1)), 400);
-    return () => clearInterval(t);
-  }, [investigate.isPending, stages.length]);
-  useEffect(() => {
-    if (investigate.isSuccess) setStep(stages.length);
-  }, [investigate.isSuccess, stages.length]);
+  const [running, setRunning] = useState(false);
+  const [done, setDone] = useState(false);
+  const [report, setReport] = useState<any>(null);
+  const [isError, setIsError] = useState(false);
 
-  const run = () => {
+  const run = async () => {
     if (!subject) return;
-    investigate.mutate({
-      asset_id: subject.id,
-      fault_description: fault,
-      sensor_snapshot: { vibration_mms: vibration, temperature_c: temperature, current_amps: current, rpm },
-    });
+    setRunning(true);
+    setDone(false);
+    setReport(null);
+    setIsError(false);
+    setStep(0);
+
+    try {
+      await investigationApi.investigateStream(
+        {
+          asset_id: subject.id,
+          fault_description: fault,
+          sensor_snapshot: { vibration_mms: vibration, temperature_c: temperature, current_amps: current, rpm },
+        },
+        (event) => {
+          if (event.progress === "COMPLETE" && event.report) {
+            setReport(event.report);
+            setStep(stages.length);
+            setDone(true);
+            setRunning(false);
+          } else {
+            const idx = stages.findIndex((s: any) => s.toLowerCase() === event.progress.toLowerCase());
+            if (idx !== -1) setStep(idx);
+          }
+        }
+      );
+    } catch (e) {
+      console.error(e);
+      setIsError(true);
+      setRunning(false);
+    }
   };
 
   // Role-specific framing of the investigation workspace.
@@ -73,10 +93,6 @@ function Investigations() {
     supervisor: { title: "Incident Review", runIdle: "Review Incident", runBusy: "Reviewing…" },
   };
   const framing = roleFraming[activeRole] ?? { title: "Investigation Center", runIdle: "Run Investigation", runBusy: "Investigating…" };
-
-  const report = investigate.data;
-  const running = investigate.isPending;
-  const done = investigate.isSuccess;
 
   const riskTone = (risk: string): "crit" | "warn" | "ok" =>
     risk === "critical" ? "crit" : risk === "high" || risk === "warning" ? "warn" : "ok";
@@ -139,7 +155,7 @@ function Investigations() {
                   * Root-cause execution is restricted to Maintenance and Reliability roles.
                 </div>
               )}
-              {investigate.isError && (
+              {isError && (
                 <div className="font-mono text-[11px] text-red-signal">Investigation failed. Check the backend is running.</div>
               )}
             </div>
@@ -152,7 +168,7 @@ function Investigations() {
               </span>
             } />
             <div className="p-5 space-y-1">
-              {stages.map((label, i) => {
+              {stages.map((label: any, i: number) => {
                 const state = i < step ? "done" : i === step && running ? "active" : "queued";
                 const Icon = STAGE_ICONS[i % STAGE_ICONS.length];
                 return (
@@ -266,7 +282,7 @@ function Investigations() {
                         Sensor Evidence
                       </div>
                       <div className="space-y-1">
-                        {report.evidence.sensor_evidence.slice(0, 6).map((e, i) => {
+                        {report.evidence.sensor_evidence.slice(0, 6).map((e: any, i: number) => {
                           const isCrit = /^critical/i.test(e);
                           const isWarn = /^warning/i.test(e);
                           return (
@@ -289,7 +305,7 @@ function Investigations() {
                         Similar Past Cases
                       </div>
                       <div className="space-y-0">
-                        {report.similar_incidents.slice(0, 5).map((inc, i) => {
+                        {report.similar_incidents?.map((inc: any, i: number) => {
                           const id = String((inc as Record<string, unknown>).incident_id ?? `INC-${i}`);
                           const rc = String((inc as Record<string, unknown>).root_cause ?? "");
                           const asset = String((inc as Record<string, unknown>).asset_id ?? "");
@@ -317,7 +333,7 @@ function Investigations() {
                       Recommended Actions
                     </div>
                     <div className="space-y-2">
-                      {report.recommended_actions.map((action, i) => (
+                      {report.recommended_actions?.map((action: any, i: number) => (
                         <div key={i} className="flex items-start gap-3 py-2.5 px-3 bg-surface-2/40 border border-border rounded-md hover:border-cyan/30 transition-colors group">
                           <span className="font-mono text-[11px] text-cyan bg-cyan/10 border border-cyan/20 rounded size-5 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-cyan/15 transition-colors">
                             {i + 1}

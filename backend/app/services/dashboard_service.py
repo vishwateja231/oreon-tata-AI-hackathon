@@ -61,14 +61,12 @@ class DashboardService:
         
         predicted_failures_list = []
         if predicted_failures:
-            asset_ids = [a.id for a in predicted_failures]
-            stmt = select(SensorReading).where(SensorReading.asset_id.in_(asset_ids)).order_by(SensorReading.timestamp.desc())
-            all_readings = self._db.scalars(stmt).all()
-            
             latest_readings = {}
-            for r in all_readings:
-                if r.asset_id not in latest_readings:
-                    latest_readings[r.asset_id] = r
+            for a in predicted_failures:
+                stmt = select(SensorReading).where(SensorReading.asset_id == a.id).order_by(SensorReading.timestamp.desc()).limit(1)
+                r = self._db.scalar(stmt)
+                if r:
+                    latest_readings[a.id] = r
             
             for a in predicted_failures:
                 r = latest_readings.get(a.id)

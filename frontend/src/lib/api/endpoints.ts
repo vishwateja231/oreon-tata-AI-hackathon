@@ -86,6 +86,52 @@ export interface SpareFilters {
 export const investigationApi = {
   investigate: (body: InvestigationRequest) =>
     http.post<InvestigationReport>("/investigate", body),
+  investigateStream: async (
+    body: InvestigationRequest,
+    onEvent: (event: { progress: string; report?: InvestigationReport }) => void,
+    signal?: AbortSignal
+  ) => {
+    const response = await fetch(`${API_BASE}/api/v1/investigate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        const data = await response.json();
+        detail = data?.detail ?? detail;
+      } catch {}
+      throw new Error(detail);
+    }
+    const reader = response.body?.getReader();
+    if (!reader) return;
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n");
+        buffer = parts.pop() || "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (line) {
+            try {
+              const event = JSON.parse(line);
+              onEvent(event);
+            } catch (e) {
+              console.error("Failed to parse NDJSON", line, e);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
   timeline: () =>
     http.get<InvestigationTimelineResponse>("/investigate/timeline"),
 };
