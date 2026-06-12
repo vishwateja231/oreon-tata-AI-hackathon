@@ -228,7 +228,7 @@ def run_ask_logic(
 
     # Only inherit asset context from conversation history if the CURRENT query is
     # plant-related — prevents "hello" / off-topic queries from getting Motor_M12 context.
-    if not pinned_assets and not mentioned_assets and history_messages:
+    if not pinned_assets and not mentioned_assets and history_messages and _is_plant_related(payload.query, all_asset_ids_early):
         for msg in reversed(history_messages):
             found_assets = []
             for asset in all_assets:
@@ -828,7 +828,7 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                     if asset.id.lower() in payload.query.lower() or asset.name.lower() in payload.query.lower():
                         mentioned_assets.append(asset)
 
-                if not pinned_assets and not mentioned_assets and history_messages:
+                if not pinned_assets and not mentioned_assets and history_messages and _is_plant_related(payload.query, all_asset_ids_early):
                     for msg in reversed(history_messages):
                         found_assets = []
                         for asset in all_assets:
