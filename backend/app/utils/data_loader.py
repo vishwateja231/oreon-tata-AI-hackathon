@@ -53,6 +53,13 @@ def load_all() -> None:
 
     db = SessionLocal()
     try:
+        from app.models.asset import Asset
+        from sqlalchemy import select, func
+        asset_count = db.scalar(select(func.count()).select_from(Asset)) or 0
+        if asset_count > 0:
+            logger.info("Database already seeded (found %d assets). Skipping data load.", asset_count)
+            return
+
         from app.services.asset_service import AssetService
         from app.services.incident_service import IncidentService
         from app.services.spare_part_service import SparePartService

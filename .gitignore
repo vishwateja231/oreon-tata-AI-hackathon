@@ -40,7 +40,9 @@ ENV/
 
 # ---- Environment & Secrets ----
 .env
+.env.*
 *.env
+backend/.env
 .env.local
 .env.production
 .env.development

@@ -19,7 +19,7 @@ services:
     expose:
       - "8000"           # internal only — nginx proxies, not exposed to host
     volumes:
-      - backend_data:/app/data          # seed JSON + embedded Qdrant index
+      - ./backend/data:/app/data          # seed JSON + embedded Qdrant index
     deploy:
       resources:
         limits:
@@ -59,8 +59,3 @@ services:
       resources:
         limits:
           memory: 64M
-
-# ── Named volumes ──────────────────────────────────────────────────────────
-volumes:
-  backend_data:
-    driver: local
