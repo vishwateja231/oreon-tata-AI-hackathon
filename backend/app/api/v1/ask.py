@@ -4,7 +4,6 @@ import logging
 import re
 import time
 from uuid import uuid4
-from typing import Generator, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -22,8 +21,7 @@ from app.services.sensor_analysis_engine import SensorAnalysisEngine
 from app.services.spare_part_service import SparePartService
 from app.config.settings import get_settings
 from app.utils.redis_cache import get_cache
-from app.services.llm_router import pick_model, stream_chat, complete_json
-from app.services.complexity_classifier import ComplexityClassifier
+from app.services.llm_router import complete_json
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ask", tags=["Ask OREON"])
@@ -83,6 +81,42 @@ def _unresolved_asset_refs(query: str, known_ids: set[str]) -> list[str]:
 def _truncate(text: str, limit: int = 240) -> str:
     text = (text or "").strip().replace("\n", " ")
     return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _resolve_mentioned_assets(query: str, all_assets: list) -> list:
+    """Resolve which assets a query refers to — exact name/ID match first, then category keywords."""
+    q_lower = query.lower()
+
+    exact = [a for a in all_assets if a.id.lower() in q_lower or a.name.lower() in q_lower]
+    if exact:
+        return exact
+
+    def _status(a):
+        return getattr(a.status, "value", str(a.status)).lower()
+
+    def _crit(a):
+        return getattr(a.criticality, "value", str(a.criticality)).lower()
+
+    # "best asset" in industrial context = healthiest / lowest risk
+    if any(w in q_lower for w in ("best asset", "top asset", "best equipment", "healthiest", "best performing")):
+        return sorted(all_assets, key=lambda a: a.health_score, reverse=True)[:3]
+    if any(w in q_lower for w in ("worst asset", "worst equipment", "most at risk", "at-risk", "highest risk", "most critical", "most dangerous", "most urgent")):
+        return sorted(all_assets, key=lambda a: a.failure_probability, reverse=True)[:3]
+    if any(w in q_lower for w in ("critical asset", "critical equipment", "criticals")):
+        return [a for a in all_assets if _status(a) == "critical" or _crit(a) == "critical"]
+    if any(w in q_lower for w in ("degraded", "warning", "deteriorat", "declining")):
+        return [a for a in all_assets if _status(a) == "warning"]
+    if any(w in q_lower for w in ("all asset", "every asset", "all equipment", "whole plant", "entire plant", "fleet", "plant-wide", "plant wide", "across the plant", "all machines", "overview", "summary")):
+        return sorted(all_assets, key=lambda a: a.failure_probability, reverse=True)
+
+    # Equipment-type / partial-name keyword match
+    kw_hits = []
+    for a in all_assets:
+        etype = (a.equipment_type or "").lower()
+        name_words = a.name.lower().replace("-", " ").split()
+        if (etype and etype in q_lower) or any(w in q_lower for w in name_words if len(w) > 3):
+            kw_hits.append(a)
+    return kw_hits
 
 
 def _assemble_grounded_evidence(
@@ -193,36 +227,10 @@ def run_ask_logic(
     all_assets = all_assets_early
     q_lower = payload.query.lower()
     mentioned_assets = []
-    for asset in all_assets:
-        if asset.id.lower() in q_lower or asset.name.lower() in q_lower:
-            mentioned_assets.append(asset)
 
-    # Attribute / category / equipment-type resolution — so queries like
-    # "all critical assets", "the gearbox", "degraded equipment", "every asset"
-    # resolve to real assets instead of falling through to a useless RAG-only answer.
-    if not mentioned_assets and not pinned_assets:
-        def _status(a):
-            return getattr(a.status, "value", str(a.status)).lower()
-        def _crit(a):
-            return getattr(a.criticality, "value", str(a.criticality)).lower()
-
-        if any(w in q_lower for w in ("critical asset", "critical equipment", "criticals", "most at risk", "at-risk", "highest risk", "worst")):
-            mentioned_assets = [a for a in all_assets if _status(a) == "critical" or _crit(a) == "critical"]
-        elif any(w in q_lower for w in ("degraded", "warning", "deteriorat", "declining")):
-            mentioned_assets = [a for a in all_assets if _status(a) == "warning"]
-        elif any(w in q_lower for w in ("all asset", "every asset", "all equipment", "whole plant", "entire plant", "fleet", "plant-wide", "plant wide", "across the plant", "all machines")):
-            mentioned_assets = sorted(all_assets, key=lambda a: a.failure_probability, reverse=True)
-        else:
-            # Equipment-type / partial-name keyword match (e.g. "gearbox", "cooling pump")
-            kw_hits = []
-            for a in all_assets:
-                etype = (a.equipment_type or "").lower()
-                name_words = a.name.lower().replace("-", " ").split()
-                if (etype and etype in q_lower) or any(w in q_lower for w in name_words if len(w) > 3):
-                    kw_hits.append(a)
-            mentioned_assets = kw_hits
-
-        # Rank by risk and cap so the prompt stays focused (top 6 most at-risk).
+    if not pinned_assets:
+        mentioned_assets = _resolve_mentioned_assets(payload.query, all_assets)
+        # Cap so the prompt stays focused (top 6 most at-risk).
         if mentioned_assets:
             mentioned_assets = sorted(mentioned_assets, key=lambda a: a.failure_probability, reverse=True)[:6]
 
@@ -400,9 +408,14 @@ def run_ask_logic(
 
     unresolved_assets = _unresolved_asset_refs(payload.query, {a.id for a in all_assets})
     if not assets_context and unresolved_assets:
+        # Query mentions an asset-style ID that doesn't exist in OREON — can't ground it.
         has_grounding = False
+    elif assets_context or procedural_kb or similar_incidents_kb:
+        has_grounding = True
     else:
-        has_grounding = bool(assets_context or procedural_kb or similar_incidents_kb)
+        # No specific asset or RAG match — still call LLM for plant-related queries
+        # using the plant-wide snapshot; only skip for truly off-topic queries.
+        has_grounding = _is_plant_related(payload.query, all_asset_ids_early)
 
     if status_callback:
         status_callback("Evaluating safety constraints...")
@@ -423,6 +436,20 @@ def run_ask_logic(
             maintenance_history_str = _hum(maintenance_history_str, _id2name)
             rag_context_str = _hum(rag_context_str, _id2name)
             alerts_str = _hum(alerts_str, _id2name)
+
+            # When no specific asset matched, inject a plant-wide risk snapshot so
+            # the LLM can answer general questions ("best asset", "overview", etc.)
+            if not assets_context_str:
+                top_risk = sorted(all_assets, key=lambda a: a.failure_probability, reverse=True)[:5]
+                _overview = "PLANT-WIDE RISK SNAPSHOT (top 5 by failure probability):\n"
+                for _a in top_risk:
+                    _overview += (
+                        f"- {_a.name}: health={_a.health_score}%, "
+                        f"failure_prob={round(_a.failure_probability * 100)}%, "
+                        f"RUL={_a.rul_days}d, status={_a.status.value}, "
+                        f"criticality={_a.criticality.value}\n"
+                    )
+                assets_context_str = _hum(_overview, _id2name)
 
             prompt = (
                 "You are OREON, the Industrial Maintenance Decision Intelligence platform for steel plant operations.\n"
@@ -823,17 +850,20 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                 if payload.context_asset_id and payload.context_asset_id not in pinned_assets:
                     pinned_assets.append(payload.context_asset_id)
 
+                # Full keyword resolution (exact name/ID + category + equipment-type)
                 mentioned_assets = []
-                for asset in all_assets:
-                    if asset.id.lower() in payload.query.lower() or asset.name.lower() in payload.query.lower():
-                        mentioned_assets.append(asset)
+                if not pinned_assets:
+                    mentioned_assets = _resolve_mentioned_assets(payload.query, all_assets)
+                    if mentioned_assets:
+                        mentioned_assets = sorted(mentioned_assets, key=lambda a: a.failure_probability, reverse=True)[:6]
 
+                # Fall back to conversation history context for plant-related follow-up queries
                 if not pinned_assets and not mentioned_assets and history_messages and _is_plant_related(payload.query, all_asset_ids_early):
                     for msg in reversed(history_messages):
                         found_assets = []
                         for asset in all_assets:
                             if asset.id.lower() in msg.content.lower() or asset.name.lower() in msg.content.lower():
-                                                    found_assets.append(asset)
+                                found_assets.append(asset)
                         if found_assets:
                             mentioned_assets = found_assets
                             break
@@ -982,8 +1012,10 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                 unresolved_assets = _unresolved_asset_refs(payload.query, {a.id for a in all_assets})
                 if not assets_context and unresolved_assets:
                     has_grounding = False
+                elif assets_context or procedural_kb or similar_incidents_kb:
+                    has_grounding = True
                 else:
-                    has_grounding = bool(assets_context or procedural_kb or similar_incidents_kb)
+                    has_grounding = _is_plant_related(payload.query, all_asset_ids_early)
 
                 llm_used = False
                 stream_success = False
@@ -1007,6 +1039,19 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                         maintenance_history_str = _hum(maintenance_history_str, _id2name)
                         rag_context_str = _hum(rag_context_str, _id2name)
                         alerts_str = _hum(alerts_str, _id2name)
+
+                        # When no specific asset matched, inject a plant-wide risk snapshot.
+                        if not assets_context_str:
+                            top_risk = sorted(all_assets, key=lambda a: a.failure_probability, reverse=True)[:5]
+                            _overview = "PLANT-WIDE RISK SNAPSHOT (top 5 by failure probability):\n"
+                            for _a in top_risk:
+                                _overview += (
+                                    f"- {_a.name}: health={_a.health_score}%, "
+                                    f"failure_prob={round(_a.failure_probability * 100)}%, "
+                                    f"RUL={_a.rul_days}d, status={_a.status.value}, "
+                                    f"criticality={_a.criticality.value}\n"
+                                )
+                            assets_context_str = _hum(_overview, _id2name)
 
                         role_personas = {
                             "plant_manager": "Respond with business risk, downtime impact, production loss (in tonnes), and financial cost exposure (in ₹ INR). Explain the cost of inaction and overall downtime impact.",
@@ -1071,61 +1116,56 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
 
                         yield f"data: {json.dumps({'type': 'status', 'message': 'Investigating probable causes...'})}\n\n"
 
-                        token_stream = stream_chat(settings, prompt, model=model, timeout=60)
-
-                        accumulated = ""
-                        # Accumulate silently — we no longer stream raw tokens to the frontend
-                        # (the free-tier models produce repetitive garbage mid-stream that looks bad).
-                        # The frontend shows a thinking animation until the 'result' event arrives.
-                        for token in token_stream:
-                            accumulated += token
-                            # Hard cap at 10000 chars to prevent runaway generation.
-                            if len(accumulated) > 10000:
-                                break
+                        # Use complete_json (forces JSON mode on Groq, lenient parsing on OpenRouter)
+                        # rather than stream_chat — streaming without JSON mode frequently produces
+                        # non-JSON output that breaks the parser and triggers the deterministic fallback.
+                        parsed = complete_json(
+                            settings,
+                            prompt,
+                            model=model,
+                            timeout=60,
+                            max_tokens=1200,
+                        )
 
                         yield f"data: {json.dumps({'type': 'status', 'message': 'Preparing engineering report...'})}\n\n"
 
-                        # Try parsing accumulated JSON (lenient — tolerates markdown newlines)
-                        from app.services.llm_router import parse_json_lenient
-                        if "{" in accumulated and "}" in accumulated:
-                            parsed = parse_json_lenient(accumulated)
-                            diagnosis = parsed.get("diagnosis", "")
-                            raw_evidence = parsed.get("evidence", [])
-                            recommended = parsed.get("recommended", "")
-                            confidence = float(parsed.get("confidence", 80.0))
-                            critical = bool(parsed.get("critical", False))
-                            reasoning = parsed.get("reasoning", [])
+                        diagnosis = parsed.get("diagnosis", "")
+                        raw_evidence = parsed.get("evidence", [])
+                        recommended = parsed.get("recommended", "")
+                        confidence = float(parsed.get("confidence", 80.0))
+                        critical = bool(parsed.get("critical", False))
+                        reasoning = parsed.get("reasoning", [])
 
-                            _VALID_SRCS = {"OREON Asset Database", "OREON RUL Model", "OREON Sensor Analysis", "OREON Incident History"}
-                            evidence = []
-                            for ev in raw_evidence:
-                                src = ev.get("src", "").strip()
-                                text = ev.get("text", "")
-                                if not src:
-                                    continue
-                                src_lower = src.lower()
-                                if any(k in src_lower for k in ("asset context", "asset state", "asset database", "current asset")):
-                                    src = "OREON Asset Database"
-                                elif any(k in src_lower for k in ("rul model", "predictive model", "rul prediction")):
-                                    src = "OREON RUL Model"
-                                elif any(k in src_lower for k in ("sensor", "telemetry", "violations")):
-                                    src = "OREON Sensor Analysis"
-                                elif any(k in src_lower for k in ("incident", "history", "priors")):
-                                    src = "OREON Incident History"
-                                if not src.lower().endswith(".pdf") and src not in _VALID_SRCS:
-                                    src = "OREON Asset Database"
-                                evidence.append({"text": text, "src": src})
+                        _VALID_SRCS = {"OREON Asset Database", "OREON RUL Model", "OREON Sensor Analysis", "OREON Incident History"}
+                        evidence = []
+                        for ev in raw_evidence:
+                            src = ev.get("src", "").strip()
+                            text = ev.get("text", "")
+                            if not src:
+                                continue
+                            src_lower = src.lower()
+                            if any(k in src_lower for k in ("asset context", "asset state", "asset database", "current asset")):
+                                src = "OREON Asset Database"
+                            elif any(k in src_lower for k in ("rul model", "predictive model", "rul prediction")):
+                                src = "OREON RUL Model"
+                            elif any(k in src_lower for k in ("sensor", "telemetry", "violations")):
+                                src = "OREON Sensor Analysis"
+                            elif any(k in src_lower for k in ("incident", "history", "priors")):
+                                src = "OREON Incident History"
+                            if not src.lower().endswith(".pdf") and src not in _VALID_SRCS:
+                                src = "OREON Asset Database"
+                            evidence.append({"text": text, "src": src})
 
-                            llm_used = True
-                            stream_success = True
+                        llm_used = True
+                        stream_success = True
                     except Exception as exc:
                         # LLM failed — fall through to deterministic fallback so the
                         # chat always gives a grounded answer from the live database.
                         logger.error("Streaming ask LLM failure: %s — falling back to deterministic response", exc)
                         yield f"data: {json.dumps({'type': 'status', 'message': 'Generating response from plant data...'})}\n\n"
 
-                if not stream_success and has_grounding and not settings.OPENROUTER_API_KEY:
-                    yield f"data: {json.dumps({'type': 'error', 'message': 'AI is not configured (OPENROUTER_API_KEY missing).'})}\n\n"
+                if not stream_success and has_grounding and not settings.OPENROUTER_API_KEY and not settings.GROQ_API_KEY:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'AI is not configured (OPENROUTER_API_KEY/GROQ_API_KEY missing).'})}\n\n"
                     return
 
                 if not stream_success:
