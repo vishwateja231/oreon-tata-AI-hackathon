@@ -40,31 +40,55 @@ const ROLE_SUGGESTIONS: Record<string, string[]> = {
     "What should I check on Motor_M12 right now?",
     "What are the current safety alerts?",
     "How do I safely shut down the Rolling Mill?",
+    "Any active alarms for the blast furnace?",
+    "What is the required PPE for pump maintenance?",
+    "Show me the operating manual for Conveyor_C2",
+    "How to respond to a high vibration alert?",
   ],
   maintenance_engineer: [
     "Why is Main Rolling Mill Drive critical?",
     "SOP for bearing replacement on Motor_M12?",
     "What spare parts do I need for Pump_P3?",
+    "Show me the maintenance history for the Dust Collector",
+    "What's causing the temperature spike in the gearbox?",
+    "Diagnose the pressure drop in the hydraulic system",
+    "Which assets require immediate attention?",
   ],
   reliability_engineer: [
     "Show RUL predictions for all critical assets",
     "Degradation trend for Motor_M12?",
     "Which assets have the worst reliability?",
+    "Compare failure probabilities across the plant",
+    "What is the expected downtime for Pump_P3?",
+    "Analyze the latest sensor anomalies",
+    "Show me assets approaching their end of life",
   ],
   supervisor: [
     "What are the open escalations right now?",
     "Which team should handle Motor_M12?",
     "What decisions need my approval today?",
+    "Show me the shift handover report",
+    "Are there any unresolved critical alerts?",
+    "Who is assigned to the blast furnace repair?",
+    "Summarize current plant health",
   ],
   plant_manager: [
     "Total revenue exposure from critical assets?",
     "Business case for proactive maintenance?",
     "Which production line has highest downtime risk?",
+    "What is the overall plant OEE today?",
+    "Summarize the cost of recent equipment failures",
+    "Top 3 reliability risks this month?",
+    "Are we meeting our production targets?",
   ],
   procurement_officer: [
     "Which spare parts are below reorder level?",
     "Lead time for Motor_M12 bearings?",
     "Which parts are at risk due to low stock?",
+    "Show me pending purchase orders for maintenance",
+    "Are there any delays from our main suppliers?",
+    "What is the inventory cost of current spares?",
+    "Forecast spare parts needed for next month",
   ],
 };
 
@@ -875,7 +899,13 @@ function AskPage() {
 }
 
 function EmptyState({ role, onSend }: { role: string; onSend: (s: string) => void }) {
-  const suggestions = ROLE_SUGGESTIONS[role] ?? ROLE_SUGGESTIONS.maintenance_engineer;
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    const allSuggs = ROLE_SUGGESTIONS[role] ?? ROLE_SUGGESTIONS.maintenance_engineer;
+    const shuffled = [...allSuggs].sort(() => 0.5 - Math.random());
+    setSuggestions(shuffled.slice(0, 3));
+  }, [role]);
   return (
     <div className="h-full flex flex-col items-center justify-center px-6 text-center">
       <img src="/logo.png" alt="OREON" className="mb-4 size-16 object-contain" />
