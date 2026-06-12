@@ -29,12 +29,7 @@ services:
     command: >
       sh -c "alembic upgrade head &&
              python -m app.utils.data_loader &&
-             uvicorn app.main:app
-               --host 0.0.0.0
-               --port 8000
-               --workers 1
-               --timeout-keep-alive 5
-               --log-level warning"
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --timeout-keep-alive 5 --log-level warning"
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
