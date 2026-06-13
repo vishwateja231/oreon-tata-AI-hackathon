@@ -68,6 +68,20 @@ class Settings(BaseSettings):
     # Deepgram API for STT/TTS voice integration
     DEEPGRAM_API_KEY: str = ""
 
+    # CORS — browser origins allowed to call this API. Override via env with a
+    # comma-separated list (e.g. CORS_ALLOW_ORIGINS="https://a.com,https://b.com").
+    CORS_ALLOW_ORIGINS: list[str] = [
+        "https://oreon.vercel.app",   # deployed frontend
+        "http://localhost:8080",      # local dev frontend
+    ]
+
+    @field_validator("CORS_ALLOW_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: object) -> object:
+        """Accept a comma-separated string from the environment."""
+        if isinstance(value, str):
+            return [o.strip() for o in value.split(",") if o.strip()]
+        return value
 
     @field_validator("DEBUG", mode="before")
     @classmethod

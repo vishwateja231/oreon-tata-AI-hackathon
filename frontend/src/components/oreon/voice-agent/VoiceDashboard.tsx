@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useActiveRole } from "@/lib/api/hooks";
 import { useOREONContext } from "@/lib/context-store";
+import { OreonWord } from "@/components/oreon/oreon-word";
 import { ParticleSphere } from "./ParticleSphere";
 import { useVoiceAgent } from "./useVoiceAgent";
 
@@ -102,6 +103,14 @@ export function VoiceDashboard() {
 
   const r = agent.response;
   const hasSummary = !!r && (r.plan_of_action.length > 0 || r.execution_log.some((e) => e.kind === "write"));
+
+  // Per-state label + accent for the voice console readout.
+  const stateMeta = {
+    listening: { label: "Listening", color: "var(--primary)" },
+    thinking: { label: "Thinking", color: "var(--accent-violet)" },
+    speaking: { label: "Response", color: "var(--state-ok)" },
+    idle: { label: "Standby", color: "var(--color-text-muted)" },
+  }[agent.state];
 
   const openAgent = () => {
     setOpen(true);
@@ -194,7 +203,7 @@ export function VoiceDashboard() {
                 >
                   {/* ultra-subtle depth glow, no hard background */}
                   <div className="absolute inset-0 rounded-full pointer-events-none"
-                    style={{ background: "radial-gradient(circle at 50% 50%, rgba(59,130,246,0.06), transparent 55%)" }} />
+                    style={{ background: "radial-gradient(circle at 50% 50%, rgba(190,205,220,0.06), transparent 55%)" }} />
                   {mounted && (
                     <Canvas
                       camera={{ position: [0, 0, 3.2], fov: 50 }}
@@ -203,91 +212,81 @@ export function VoiceDashboard() {
                       className="w-full h-full [&_canvas]:!w-full [&_canvas]:!h-full [&_canvas]:!absolute [&_canvas]:!top-0 [&_canvas]:!left-0"
                       style={{ background: "transparent" }}
                     >
-                      <ParticleSphere audioRef={agent.audioRef} state={agent.state} coreColor={theme.core} rimColor={theme.rim} />
+                      {/* Monochrome steel/silver orb — matches the OREON black-and-white theme
+                          across every role (no per-role colour). */}
+                      <ParticleSphere audioRef={agent.audioRef} state={agent.state} coreColor="#5b6675" rimColor="#eef3f8" />
                     </Canvas>
                   )}
                 </div>
 
-                {/* Premium Subtitles Panel */}
+                {/* Voice console readout — OREON editorial industrial styling */}
                 <div
-                  className="w-[min(640px,90vw)] font-sans text-left px-6 py-5 card-elevated backdrop-blur-md relative overflow-hidden shadow-[0_30px_70px_rgba(0,0,0,0.55)] transition-all duration-300 pointer-events-auto shrink-0"
+                  className="relative w-[min(640px,90vw)] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-[oklch(0.155_0.004_270)]/80 px-6 py-5 font-sans text-left shadow-[0_30px_80px_-20px_rgba(0,0,0,0.85)] backdrop-blur-xl pointer-events-auto"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Left Role visual accent bar */}
-                  <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-primary" />
+                  {/* state-coloured top edge, fading at the sides */}
+                  <div
+                    className="absolute inset-x-0 top-0 h-px"
+                    style={{ background: `linear-gradient(90deg, transparent, ${stateMeta.color}, transparent)` }}
+                  />
+                  {/* faint industrial grid texture */}
+                  <div className="grid-bg pointer-events-none absolute inset-0 opacity-[0.05]" />
 
-                  {/* Removed explicit X close button as per user request. Clicking outside closes the overlay. */}
+                  {/* header strip — live status left, brand tag right */}
+                  <div className="relative mb-3 flex items-center justify-between">
+                    <div
+                      className="flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.18em]"
+                      style={{ color: stateMeta.color }}
+                    >
+                      <span className="relative flex size-2">
+                        {agent.state !== "idle" && (
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" style={{ background: stateMeta.color }} />
+                        )}
+                        <span className="relative inline-flex size-2 rounded-full" style={{ background: stateMeta.color }} />
+                      </span>
+                      {stateMeta.label}
+                    </div>
+                    <span className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/70">
+                      <OreonWord /> · Voice
+                    </span>
+                  </div>
 
-                  {agent.state === "listening" && (
-                    <div className="space-y-2 pr-6">
-                      <div className="flex items-center gap-2 mb-2 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-primary">
-                        <span className="relative flex size-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                          <span className="relative inline-flex rounded-full size-2 bg-primary"></span>
-                        </span>
-                        Listening
-                      </div>
-                      <p className="font-sans text-[15px] font-medium text-foreground tracking-wide leading-relaxed drop-shadow-sm">
-                        {agent.interim || <span className="text-text-muted/65 italic">Speak now...</span>}
+                  {/* body */}
+                  <div className="relative pr-1">
+                    {agent.state === "listening" && (
+                      <p className="font-sans text-[15px] font-medium leading-relaxed tracking-wide text-foreground">
+                        {agent.interim || <span className="italic text-text-muted/65">Speak now…</span>}
                       </p>
-                    </div>
-                  )}
-                  {agent.state === "thinking" && (
-                    <div className="space-y-2 pr-6">
-                      <div className="flex items-center gap-2 mb-2 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-violet">
-                        <span className="relative flex size-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet opacity-75"></span>
-                          <span className="relative inline-flex rounded-full size-2 bg-violet"></span>
-                        </span>
-                        Thinking
-                      </div>
-                      {agent.lastUtterance && (
-                        <p className="font-sans text-[13px] text-text-secondary italic leading-relaxed">
-                          "{agent.lastUtterance}"
-                        </p>
-                      )}
-                      <p className="font-sans text-[14px] text-violet font-medium animate-pulse tracking-wide leading-relaxed">
-                        Analyzing plant telemetry & context...
-                      </p>
-                    </div>
-                  )}
-                  {agent.state === "speaking" && agent.response?.spoken_response && (
-                    <div className="space-y-3 pr-6">
-                      {agent.lastUtterance && (
-                        <div className="border-b border-border/40 pb-2 text-left">
-                          <span className="font-mono text-[9px] tracking-widest text-text-muted uppercase block mb-0.5">
-                            Operator Utterance
-                          </span>
-                          <p className="font-sans text-[13px] text-text-secondary italic leading-relaxed">
-                            "{agent.lastUtterance}"
-                          </p>
-                        </div>
-                      )}
+                    )}
+                    {agent.state === "thinking" && (
                       <div className="space-y-1.5">
-                        <div className="flex items-center gap-2 mb-2 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-emerald-400">
-                          <span className="relative flex size-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full size-2 bg-emerald-400"></span>
-                          </span>
-                          OREON Voice
-                        </div>
-                        <p className="font-sans text-[15px] leading-relaxed text-foreground font-medium tracking-wide drop-shadow-sm max-h-[140px] overflow-y-auto pr-2 custom-scrollbar">
+                        {agent.lastUtterance && (
+                          <p className="font-sans text-[13px] italic leading-relaxed text-text-secondary">"{agent.lastUtterance}"</p>
+                        )}
+                        <p className="font-sans text-[14px] font-medium leading-relaxed tracking-wide text-violet">
+                          Analyzing plant telemetry &amp; context…
+                        </p>
+                      </div>
+                    )}
+                    {agent.state === "speaking" && agent.response?.spoken_response && (
+                      <div className="space-y-2.5">
+                        {agent.lastUtterance && (
+                          <div className="border-b border-border/40 pb-2">
+                            <span className="mb-0.5 block font-mono text-[9px] uppercase tracking-widest text-text-muted">Operator</span>
+                            <p className="font-sans text-[13px] italic leading-relaxed text-text-secondary">"{agent.lastUtterance}"</p>
+                          </div>
+                        )}
+                        <p className="custom-scrollbar max-h-[140px] overflow-y-auto pr-2 font-sans text-[15px] font-medium leading-relaxed tracking-wide text-foreground">
                           {agent.response.spoken_response}
                         </p>
                       </div>
-                    </div>
-                  )}
-                  {agent.state === "idle" && (
-                    <div className="space-y-2 pr-6">
-                      <div className="flex items-center gap-2 mb-2 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-text-muted">
-                        <span className="size-1.5 rounded-full bg-text-muted/65" />
-                        Voice Agent Standby
-                      </div>
-                      <p className="font-sans text-[14px] text-text-muted leading-relaxed">
+                    )}
+                    {agent.state === "idle" && (
+                      <p className="font-sans text-[14px] leading-relaxed text-text-muted">
                         {agent.lastUtterance ? `"${agent.lastUtterance}"` : "Tap the sphere to begin"}
                       </p>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </motion.div>
 
