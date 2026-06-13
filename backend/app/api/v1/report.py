@@ -120,7 +120,10 @@ def export_maintenance_report(
 
     try:
         decision_svc = DecisionService(db)
-        report = decision_svc.analyze(payload)
+        # The PDF renders only deterministic fields (diagnosis, root cause, evidence,
+        # scenarios, procurement, executive summary) — never the LLM narrative. Skip the
+        # two slow LLM narration calls so the report generates in seconds, not minutes.
+        report = decision_svc.analyze(payload, with_explanation=False)
         report_data = report.model_dump(mode="json")
         # Add asset metadata manually for report formatting
         report_data["asset"] = {

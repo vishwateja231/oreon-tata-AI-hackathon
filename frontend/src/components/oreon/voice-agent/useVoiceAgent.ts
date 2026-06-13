@@ -83,7 +83,13 @@ export function useVoiceAgent({ role, contextAssetId, currentPage, recentActivit
   const [lastUtterance, setLastUtterance] = useState("");
   const [response, setResponse] = useState<VoiceConverseResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [useNativeSTT, setUseNativeSTT] = useState(false);
+  // Prefer browser-native SpeechRecognition when available: it streams interim text
+  // in real time, auto-stops on natural silence (no fixed record window) and needs no
+  // Deepgram round-trip — far lower latency than the MediaRecorder→Deepgram path, and
+  // it works even when the Deepgram key is absent.
+  const [useNativeSTT, setUseNativeSTT] = useState(
+    () => typeof window !== "undefined" && (!!(window as any).SpeechRecognition || !!(window as any).webkitSpeechRecognition),
+  );
   const [voiceModel, setVoiceModel] = useState("aura-asteria-en");
   const [nativeVoice, setNativeVoice] = useState<SpeechSynthesisVoice | null>(null);
 
@@ -110,6 +116,10 @@ export function useVoiceAgent({ role, contextAssetId, currentPage, recentActivit
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recognitionRef = useRef<any>(null);
+
+  // Voice-activity detection for the Deepgram (MediaRecorder) fallback path — stops the
+  // recording ~1.1s after the user stops talking instead of waiting a fixed window.
+  const vadRef = useRef({ active: false, lastLoud: 0, everLoud: false });
 
   // Load premium native voice on mount
   useEffect(() => {
@@ -211,6 +221,26 @@ export function useVoiceAgent({ role, contextAssetId, currentPage, recentActivit
             high: band(40, 100),
             amp: band(1, 110),
           };
+
+          // Silence-based auto-stop for the Deepgram recording path: once the user has
+          // actually spoken, end the turn ~1.1s after they go quiet.
+          const vad = vadRef.current;
+          if (vad.active) {
+            const now = performance.now();
+            if (audioRef.current.amp > 0.04) {
+              vad.lastLoud = now;
+              vad.everLoud = true;
+            }
+            if (
+              vad.everLoud &&
+              now - vad.lastLoud > 1100 &&
+              mediaRecorderRef.current &&
+              mediaRecorderRef.current.state === "recording"
+            ) {
+              vad.active = false;
+              try { mediaRecorderRef.current.stop(); } catch { /* ignore */ }
+            }
+          }
         }
         rafRef.current = requestAnimationFrame(tick);
       };
@@ -421,13 +451,11 @@ export function useVoiceAgent({ role, contextAssetId, currentPage, recentActivit
     setPhase("listening");
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStreamRef.current = stream;
-      
-      const analyzerOk = await startMicAnalyser();
-      if (!analyzerOk && stateRef.current === "listening") {
-        startListenEnvelope();
-      }
+      // SpeechRecognition manages the microphone itself. Opening a second getUserMedia
+      // stream for the analyser alongside it is a common cause of recognition silently
+      // failing to capture — so drive the orb with the cosmetic envelope instead and let
+      // SpeechRecognition be the sole mic consumer (far more reliable capture).
+      startListenEnvelope();
 
       setInterim("Speak now...");
 
@@ -468,10 +496,15 @@ export function useVoiceAgent({ role, contextAssetId, currentPage, recentActivit
 
       recognition.onerror = (event: any) => {
         console.error("Native SpeechRecognition error:", event.error);
-        if (event.error !== "no-speech") {
-          setError(`Native Speech Recognition error: ${event.error}`);
-        } else {
+        if (event.error === "network" || event.error === "service-not-allowed") {
+          // The browser's STT service is unreachable — switch to the Deepgram path so
+          // the next attempt still works.
+          setUseNativeSTT(false);
+          setError("Switched to cloud transcription — tap the sphere and speak again.");
+        } else if (event.error === "no-speech") {
           setError("I didn't hear anything — tap the sphere and speak.");
+        } else if (event.error !== "aborted") {
+          setError(`Speech recognition error: ${event.error}`);
         }
         stopMicAnalyser();
         setPhase("idle");
@@ -498,6 +531,7 @@ export function useVoiceAgent({ role, contextAssetId, currentPage, recentActivit
   // ── Unified Stop Function ──────────────────────────────────────────
   const stop = useCallback(() => {
     clearSilenceTimer();
+    vadRef.current.active = false;
 
     // Stop recording
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -589,6 +623,7 @@ export function useVoiceAgent({ role, contextAssetId, currentPage, recentActivit
       };
 
       mediaRecorder.onstop = async () => {
+        vadRef.current.active = false;
         // Stop the parallel SpeechRecognition if it was running
         if (recognitionRef.current && !useNativeSTT) {
           try {
@@ -689,10 +724,12 @@ export function useVoiceAgent({ role, contextAssetId, currentPage, recentActivit
         }
       }
 
+      vadRef.current = { active: true, lastLoud: performance.now(), everLoud: false };
       mediaRecorder.start();
-      
-      // Auto-stop recording after 8 seconds of continuous recording
-      resetSilenceTimer(8000);
+
+      // Silence detection (in the analyser tick) ends the turn naturally; this is only a
+      // hard safety cap for a very long utterance or a mic with no measurable level.
+      resetSilenceTimer(12000);
 
     } catch (err) {
       console.error("Mic access failed:", err);

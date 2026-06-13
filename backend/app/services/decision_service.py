@@ -41,9 +41,9 @@ class DecisionService:
         self.maintenance_planner = MaintenancePlanner()
         self.reasoning_service = DecisionReasoningService()
 
-    def analyze(self, request: DecisionAnalyzeRequest) -> DecisionReport:
+    def analyze(self, request: DecisionAnalyzeRequest, *, with_explanation: bool = True) -> DecisionReport:
         asset = self._require_asset(request.asset_id)
-        investigation = self.investigation_service.investigate(request)
+        investigation = self.investigation_service.investigate(request, with_explanation=with_explanation)
         plant_impact = self.impact_engine.analyze_impact(asset.id)
         required_parts = request.required_parts or self._infer_required_parts(asset, investigation.root_cause)
         procurement = self.procurement_engine.analyze(required_parts, asset.equipment_type, asset.id)
@@ -91,7 +91,10 @@ class DecisionService:
             executive_summary=self._executive_summary(asset, priority, business_impact, procurement),
             recommendations_by_role=recos
         )
-        report.explanation = self.reasoning_service.explain(report)
+        # Second (and largest) LLM narration — skipped for consumers like the PDF export
+        # that render only the deterministic report fields.
+        if with_explanation:
+            report.explanation = self.reasoning_service.explain(report)
         return report
 
     def simulate_scenario(self, asset_id: str, delay_days: int):

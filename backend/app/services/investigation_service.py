@@ -60,15 +60,18 @@ class InvestigationService:
         self.incident_retrieval_service = IncidentRetrievalService(db)
         self.feedback_learning_service = FeedbackLearningService(db)
 
-    def investigate(self, request: InvestigationRequest) -> InvestigationReport:
+    def investigate(self, request: InvestigationRequest, *, with_explanation: bool = True) -> InvestigationReport:
         import json
-        for chunk in self.investigate_stream(request):
+        # Non-streaming callers (e.g. PDF/report export) don't need UI pacing; skip the
+        # cosmetic sleeps. `with_explanation=False` also skips the slow LLM narration for
+        # consumers (like the PDF) that only render the deterministic fields.
+        for chunk in self.investigate_stream(request, with_explanation=with_explanation, pace=False):
             data = json.loads(chunk.strip())
             if data.get("progress") == "COMPLETE":
                 return InvestigationReport(**data["report"])
         raise RuntimeError("Failed to generate investigation report")
 
-    def investigate_stream(self, request: InvestigationRequest):
+    def investigate_stream(self, request: InvestigationRequest, *, with_explanation: bool = True, pace: bool = True):
         import json
         import time
         asset = self.asset_service.get_by_id(request.asset_id)
@@ -76,9 +79,14 @@ class InvestigationService:
             raise ValueError(f"Asset '{request.asset_id}' not found")
 
         logger.info("Starting investigation for asset %s", asset.id)
+        def _pause(seconds: float) -> None:
+            # Cosmetic pacing for the streaming UI only; skipped for non-streaming callers.
+            if pace:
+                time.sleep(seconds)
+
         yield json.dumps({"progress": "Loading Asset"}) + "\n"
-        time.sleep(0.4)
-        
+        _pause(0.4)
+
         yield json.dumps({"progress": "Analyzing Sensors"}) + "\n"
         sensor_history = self.sensor_service.get_by_asset(asset.id, limit=250)
         sensor_analysis = self.sensor_engine.analyze_sensor_snapshot(request.sensor_snapshot)
@@ -86,9 +94,9 @@ class InvestigationService:
         sensor_analysis.trend_summary = trend_summary
 
         yield json.dumps({"progress": "Searching Manuals"}) + "\n"
-        time.sleep(0.6)
+        _pause(0.6)
         yield json.dumps({"progress": "Searching SOPs"}) + "\n"
-        time.sleep(0.6)
+        _pause(0.6)
         yield json.dumps({"progress": "Searching Historical Incidents"}) + "\n"
 
         retrieval_query = self._build_query(asset, request)
@@ -118,7 +126,7 @@ class InvestigationService:
         learning_signals = self._build_learning_signals(asset, root_cause, historical)
 
         yield json.dumps({"progress": "Generating Evidence"}) + "\n"
-        time.sleep(0.5)
+        _pause(0.5)
         evidence = self.evidence_engine.build_evidence(
             sensor_analysis=sensor_analysis,
             manual_chunks=manual_chunks,
@@ -160,7 +168,7 @@ class InvestigationService:
             rul_upper = pred_rul * 1.3
 
         yield json.dumps({"progress": "Building Report"}) + "\n"
-        time.sleep(0.5)
+        _pause(0.5)
 
         report = InvestigationReport(
             asset_id=asset.id,
@@ -185,11 +193,14 @@ class InvestigationService:
             historical_knowledge=historical,
             learning_signals=learning_signals,
         )
-        report.llm_explanation = self.reasoning_service.explain(
-            report=report,
-            asset_context=self._asset_context(asset),
-            plant_context=self.graph_service.get_direct_dependencies(asset.id),
-        )
+        # The LLM narration is the slowest step. Callers that only need the deterministic
+        # report (e.g. PDF export) pass with_explanation=False to skip it entirely.
+        if with_explanation:
+            report.llm_explanation = self.reasoning_service.explain(
+                report=report,
+                asset_context=self._asset_context(asset),
+                plant_context=self.graph_service.get_direct_dependencies(asset.id),
+            )
         
         # Save to Maintenance Logbook
         try:
