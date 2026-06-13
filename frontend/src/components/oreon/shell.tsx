@@ -29,10 +29,23 @@ import { useDashboard, useActiveRole, useRoleConfig } from "@/lib/api/hooks";
 import { AskPalette, useAskPalette } from "@/components/oreon/ask-palette";
 import { SectionErrorBoundary } from "@/components/oreon/error-boundary";
 import { VoiceDashboard } from "@/components/oreon/voice-agent/VoiceDashboard";
+import { OreonWord } from "@/components/oreon/oreon-word";
 import { useOREONContext } from "@/lib/context-store";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { ASSET_DISPLAY_NAMES } from "@/lib/oreon-data";
+
+/** Render a header title, styling any "OREON" occurrence as the silver wordmark. */
+function renderBrandTitle(title: string) {
+  if (!title.includes("OREON")) return title;
+  const parts = title.split("OREON");
+  return parts.map((p, i) => (
+    <span key={i}>
+      {p}
+      {i < parts.length - 1 && <OreonWord />}
+    </span>
+  ));
+}
 
 /** Map a route path to a human-friendly screen name for the voice agent. */
 function friendlyPageName(pathname: string, activeRole?: string, currentTab?: string): string {
@@ -420,7 +433,7 @@ export function Shell({ children, title, subtitle }: { children: ReactNode; titl
             <Link to="/" className="flex items-center gap-2.5 min-w-0">
               <img src="/logo.png" alt="OREON Logo" className="size-[26px] object-contain shrink-0" />
               <div className="flex flex-col">
-                <span className="text-[14px] font-semibold tracking-tight leading-none whitespace-nowrap">OREON</span>
+                <OreonWord className="text-[14px] font-semibold tracking-tight leading-none whitespace-nowrap" />
                 <span className="text-[8px] font-medium tracking-[0.05em] text-text-muted mt-0.5 whitespace-nowrap uppercase">Maintenance Wizard</span>
               </div>
             </Link>
@@ -498,7 +511,11 @@ export function Shell({ children, title, subtitle }: { children: ReactNode; titl
                           strokeWidth={1.5}
                         />
                       )}
-                      {!sidebarCollapsed && <span className="text-[13px] flex-1 truncate">{item.label}</span>}
+                      {!sidebarCollapsed && (
+                        <span className="text-[13px] flex-1 truncate">
+                          {item.to === "/app/ask" ? <>Ask <OreonWord /></> : item.label}
+                        </span>
+                      )}
                       {!isAllowed ? (
                         <Lock className="size-3 text-text-muted/40 shrink-0" strokeWidth={2} />
                       ) : !sidebarCollapsed && badge ? (
@@ -542,7 +559,7 @@ export function Shell({ children, title, subtitle }: { children: ReactNode; titl
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         <header className="relative z-40 h-11 border-b border-border flex items-center justify-between px-5 bg-surface-1/40 backdrop-blur-sm">
           <div className="flex items-center gap-4">
-            <span className="text-[13px] font-medium">{title}</span>
+            <span className="text-[13px] font-medium">{renderBrandTitle(title)}</span>
             {subtitle && <span className="text-[12px] text-text-muted">{subtitle}</span>}
           </div>
           <div className="flex items-center gap-3">
@@ -561,7 +578,7 @@ export function Shell({ children, title, subtitle }: { children: ReactNode; titl
                     style={{ animation: "oreon-spin 9s linear infinite" }}
                   />
                 </span>
-                <span className="text-[12px] font-medium text-foreground">OREON Voice</span>
+                <span className="text-[12px] font-medium text-foreground"><OreonWord /> Voice</span>
               </button>
             )}
             {/* ── Custom Role Dropdown ── */}

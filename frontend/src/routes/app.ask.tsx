@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Markdown from "react-markdown";
 import { Shell } from "@/components/oreon/shell";
+import { OreonWord } from "@/components/oreon/oreon-word";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { z } from "zod";
 import {
@@ -479,14 +480,6 @@ function AskPage() {
   }, []);
 
   useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     const handleNewChat = () => startNew();
     window.addEventListener("oreon:new-chat", handleNewChat);
     return () => window.removeEventListener("oreon:new-chat", handleNewChat);
@@ -519,6 +512,19 @@ function AskPage() {
   const dbLenRef = useRef(0);
   const sentAtLenRef = useRef(0);
   useEffect(() => { dbLenRef.current = dbMessages.length; }, [dbMessages]);
+
+  // Clear the optimistic (pending) bubble the instant the persisted thread includes
+  // the just-sent exchange. Combined with the forced post-send refetch in `send`, this
+  // guarantees the user's question + reply never vanish (the bug where a 2nd turn
+  // disappeared until refresh) and never momentarily double-render.
+  useEffect(() => {
+    if (pendingUserMsg && dbMessages.length > sentAtLenRef.current) {
+      setPendingUserMsg(null);
+      setPendingPins([]);
+      setStreamingResult(null);
+      setStreamingStatus(undefined);
+    }
+  }, [dbMessages, pendingUserMsg]);
 
   const assetTerms = useMemo(() => {
     const terms = new Set<string>();
@@ -604,28 +610,37 @@ function AskPage() {
       // The backend is the source of truth for which conversation this landed in.
       const convId = finalConvId || activeId;
       if (convId) {
-        // Load the conversation's messages into cache BEFORE we clear the optimistic
-        // bubble, so the just-sent exchange never blinks out and back in. Switching
-        // activeId to convId also guarantees we never desync to a stale chat.
+        // Force a FRESH read of the thread (staleTime: 0). The global 30s query
+        // staleTime would otherwise serve the pre-reply message list from cache, so
+        // a follow-up turn's question + reply never appeared until a manual refresh.
+        // We refetch BEFORE clearing the optimistic bubble so the exchange never blinks.
         await Promise.all([
           refetchHistory(),
-          qc.fetchQuery({ queryKey: ["ask-messages", convId], queryFn: () => askApi.messages(convId) }),
+          qc.fetchQuery({
+            queryKey: ["ask-messages", convId],
+            queryFn: () => askApi.messages(convId),
+            staleTime: 0,
+          }),
         ]);
         if (convId !== activeId) setActiveId(convId);
       }
+      // NOTE: the optimistic pending bubble is intentionally NOT cleared here. The
+      // "clear pending once the saved thread catches up" effect removes it the instant
+      // the persisted exchange is in `dbMessages`, giving a seamless, flash-free handoff.
     } catch (err: any) {
       if (err.name === "AbortError" || err.message === "The user aborted a request.") {
         return;
       }
       setSendError(err.message || "Failed to ask OREON.");
-    } finally {
-      if (abortControllerRef.current === controller) {
-        abortControllerRef.current = null;
-      }
+      // A failed turn: drop the optimistic bubble so the user can cleanly retry.
       setStreamingResult(null);
       setStreamingStatus(undefined);
       setPendingUserMsg(null);
       setPendingPins([]);
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -691,7 +706,7 @@ function AskPage() {
           onClose={() => setSidebarOpen(false)}
           history={history}
           activeId={activeId}
-          onSelect={setActiveId}  // sidebar stays open — no onClose here
+          onSelect={selectConversation}  // sidebar stays open — no onClose here
           onNew={startNew}
           deleteConversation={deleteConversation}
         />
@@ -882,6 +897,23 @@ function AskPage() {
     </Shell>
   );
 
+  // Switching conversations mid-stream would land the in-flight reply in the wrong
+  // thread and desync the optimistic bubble — abort and clear pending state first.
+  function selectConversation(id: string) {
+    if (id === activeId) return;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setPendingUserMsg(null);
+      setPendingPins([]);
+      setStreamingResult(null);
+      setStreamingStatus(undefined);
+    }
+    setSendError(null);
+    setExpanded({});  // details are keyed by message index — reset so they don't bleed across threads
+    setActiveId(id);
+  }
+
   function startNew() {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
@@ -909,7 +941,7 @@ function EmptyState({ role, onSend }: { role: string; onSend: (s: string) => voi
   return (
     <div className="h-full flex flex-col items-center justify-center px-6 text-center">
       <img src="/logo.png" alt="OREON" className="mb-4 size-16 object-contain" />
-      <h2 className="text-[22px] font-semibold tracking-tight mb-1">Ask OREON</h2>
+      <h2 className="text-[22px] font-semibold tracking-tight mb-1">Ask <OreonWord /></h2>
       <p className="text-[13px] text-text-muted mb-7 max-w-[38ch]">
         Your industrial maintenance intelligence. Ask about any asset, failure, SOP, or plant risk.
       </p>

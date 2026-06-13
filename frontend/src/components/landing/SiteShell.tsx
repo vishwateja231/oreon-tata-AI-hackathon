@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useLaunch } from "@/components/landing/LaunchTransition";
+import { OreonWord } from "@/components/oreon/oreon-word";
 
 /** Strip any in-app role accent class so the landing keeps its own colour scheme. */
 function useResetRoleAccent() {
@@ -25,7 +26,7 @@ export function Header() {
       <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between px-8">
         <Link to="/" className="flex items-center gap-3">
           <img src="/logo.png" alt="OREON" width={26} height={26} className="block h-[26px] w-[26px] object-contain" />
-          <span className="font-display text-[15px] font-medium tracking-tight">OREON</span>
+          <OreonWord className="font-display text-[15px] font-medium tracking-tight" />
           <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-[var(--ink-dim)]">
             Maintenance Wizard
           </span>

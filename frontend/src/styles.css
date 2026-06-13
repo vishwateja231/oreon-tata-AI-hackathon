@@ -313,6 +313,30 @@
   font-weight: 500;
 }
 
+/* === Landing hero — brushed-steel wordmark (static) === */
+.hero-wordmark {
+  /* soft metallic bloom around the mark */
+  filter: drop-shadow(0 8px 56px rgba(170, 190, 210, 0.18));
+}
+
+/* "ORE" — polished silver / chrome: bright highlight band with a soft
+   reflection horizon so it reads as shining silver, not flat grey */
+.text-steel {
+  background-image: linear-gradient(
+    180deg,
+    #f4f7fa 0%,
+    #c4cdd6 30%,
+    #ffffff 47%,
+    #7e8995 54%,
+    #aab4bf 70%,
+    #eef2f6 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
 .btn-ghost {
   display: inline-flex; align-items: center; gap: 0.75rem;
   padding: 0.875rem 1.5rem;

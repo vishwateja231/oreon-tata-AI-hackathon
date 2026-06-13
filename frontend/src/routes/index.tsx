@@ -36,81 +36,7 @@ function HomePage() {
   );
 }
 
-/* ============= HERO EVIDENCE CARD — what OREON actually produces ============= */
-function EvidenceCard() {
-  const chips = [
-    { t: "Vibration ▲ 18%", c: "#fb7185" },
-    { t: "Oil temp ▲ 9°C", c: "#fbbf24" },
-    { t: "SOP-114 §4.2", c: "#2dd4bf" },
-    { t: "Incident INC-2231", c: "#a78bfa" },
-  ];
-  return (
-    <div className="rounded-xl border border-white/10 bg-[oklch(0.165_0.004_270)] p-6 shadow-[0_32px_90px_-30px_rgba(0,0,0,0.9)]">
-      <div className="flex items-center justify-between gap-4">
-        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-dim)]">Reduction Gearbox · Gearbox_G1</span>
-        <span className="inline-flex items-center gap-2 rounded-md border border-[#fb7185]/40 bg-[#fb7185]/10 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.2em] text-[#fb7185]">
-          <span className="size-1.5 rotate-45 bg-[#fb7185]" />
-          Critical severity
-        </span>
-      </div>
-
-      <h3 className="mt-4 font-display text-[25px] leading-tight text-foreground">Bearing wear from lubrication loss</h3>
-      <p className="mt-2.5 text-[13px] leading-[1.6] text-[var(--ink-dim)]">
-        Failure predicted in <span className="text-[#fbbf24]">11 days</span> — root cause traced to a
-        declining oil film and rising vibration harmonics.
-      </p>
-
-      {/* model confidence */}
-      <div className="mt-5">
-        <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-dim)]">
-          <span>Model confidence</span>
-          <span className="text-[#34d399]">91%</span>
-        </div>
-        <div className="mt-2 h-[4px] overflow-hidden rounded-full bg-white/[0.06]">
-          <div className="h-full rounded-full bg-[#34d399]" style={{ width: "91%" }} />
-        </div>
-      </div>
-
-      {/* evidence cited */}
-      <div className="mt-5">
-        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--ink-dim)]">Evidence cited</div>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {chips.map((c) => (
-            <span
-              key={c.t}
-              className="rounded-md border px-2.5 py-1 font-mono text-[10px]"
-              style={{ color: c.c, borderColor: `${c.c}33`, background: `${c.c}0d` }}
-            >
-              {c.t}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* recommended next steps — generalized post-prediction workflow */}
-      <div className="mt-5 border-t border-white/[0.06] pt-4">
-        <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--ink-dim)]">Recommended next steps</div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {[
-            { n: "01", t: "Draft work order", c: "#34d399" },
-            { n: "02", t: "Stage replacement spare", c: "#2dd4bf" },
-            { n: "03", t: "Schedule maintenance window", c: "#a78bfa" },
-          ].map((s, i) => (
-            <span key={s.n} className="flex items-center gap-2">
-              {i > 0 && <span className="text-[12px] text-[var(--ink-dim)]/50">→</span>}
-              <span className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5">
-                <span className="font-mono text-[9px]" style={{ color: s.c }}>{s.n}</span>
-                <span className="text-[12px] text-foreground/90">{s.t}</span>
-              </span>
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ============= HERO ============= */
+/* ============= HERO — centered brushed-steel wordmark ============= */
 function Hero({ container }: { container: RefObject<HTMLDivElement | null> }) {
   const ref = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ container, target: ref, offset: ["start start", "end start"] });
@@ -124,65 +50,54 @@ function Hero({ container }: { container: RefObject<HTMLDivElement | null> }) {
   };
 
   return (
-    <section ref={ref} className="relative min-h-[92vh] overflow-hidden border-b border-[var(--hairline)]">
-      <motion.div style={{ y, opacity }} className="relative mx-auto grid min-h-[92vh] max-w-[1600px] items-center gap-12 px-8 py-20 lg:grid-cols-[1.05fr_1fr]">
-        <div>
-          <Reveal>
-            <div className="flex items-center gap-4 text-[11px] uppercase tracking-[0.25em] text-[var(--ink-dim)]">
-              <span className="h-px w-10 bg-brand" />
-              <span className="font-mono">Industrial Operations · Built for Steel Manufacturing</span>
-            </div>
-          </Reveal>
+    <section ref={ref} className="relative flex min-h-[92vh] flex-col overflow-hidden border-b border-[var(--hairline)]">
+      <motion.div
+        style={{ y, opacity }}
+        className="relative z-10 mx-auto flex w-full max-w-[1100px] flex-1 flex-col items-center justify-center px-6 py-16 text-center"
+      >
+        <Reveal>
+          <div className="flex items-center justify-center gap-4 text-[11px] uppercase tracking-[0.25em] text-[var(--ink-dim)]">
+            <span className="h-px w-10 bg-brand" />
+            <span className="font-mono">Industrial Operations · Built for Steel Manufacturing</span>
+            <span className="h-px w-10 bg-brand" />
+          </div>
+        </Reveal>
 
-          <Reveal delay={0.1}>
-            <h1 className="mt-8 h-display text-[80px] leading-[0.9] sm:text-[120px]">
-              OREON
-            </h1>
-          </Reveal>
-          <Reveal delay={0.15}>
-            <div className="mt-2 font-display text-[30px] font-light tracking-tight text-foreground sm:text-[44px]">
-              Maintenance Wizard
-            </div>
-          </Reveal>
+        <Reveal delay={0.1}>
+          <h1
+            className="hero-wordmark mt-7 select-none font-display font-semibold leading-[0.84] tracking-[-0.045em]"
+            style={{ fontSize: "clamp(92px, 19vw, 300px)" }}
+          >
+            <span className="text-steel">ORE</span><span className="text-foreground">ON</span>
+          </h1>
+        </Reveal>
 
-          <Reveal delay={0.2}>
-            <p className="mt-8 max-w-xl font-display text-[20px] leading-[1.3] text-foreground sm:text-[24px]">
-              An autonomous intelligence layer between sensor and decision —
-              it watches the plant, predicts failures and shows its evidence.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a href="/command" onClick={fire} className="btn-solid">Enter OREON →</a>
-              <Link to="/platform" className="btn-ghost">Explore the platform</Link>
-            </div>
-          </Reveal>
-        </div>
+        <Reveal delay={0.15}>
+          <div className="mt-2 font-display text-[26px] font-light tracking-tight text-foreground sm:text-[44px]">
+            Maintenance Wizard
+          </div>
+        </Reveal>
 
-        <div className="hidden lg:block">
-          <Reveal delay={0.25}>
-            <EvidenceCard />
+        <Reveal delay={0.2}>
+          <p className="mx-auto mt-7 max-w-[42ch] font-display text-[18px] leading-[1.4] text-[var(--ink-dim)] sm:text-[22px]">
+            An autonomous intelligence layer between sensor and decision —
+            it watches the plant, predicts failures and shows its evidence.
+          </p>
+        </Reveal>
 
-            <div className="mt-4 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-white/10 bg-white/[0.06]">
-              {[
-                ["10", "assets watched", "#2dd4bf"],
-                ["08", "reasoning engines", "#a78bfa"],
-                ["06", "role surfaces", "#34d399"],
-                ["24/7", "sentinel watch", "#fbbf24"],
-              ].map(([v, l, c]) => (
-                <div key={l} className="bg-[oklch(0.165_0.004_270)] p-4 text-center">
-                  <div className="font-mono text-[22px] leading-none" style={{ color: c }}>{v}</div>
-                  <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.15em] text-[var(--ink-dim)]">{l}</div>
-                </div>
-              ))}
-            </div>
-          </Reveal>
-        </div>
+        <Reveal delay={0.25}>
+          <div className="mt-9 flex flex-wrap justify-center gap-3">
+            <a href="/command" onClick={fire} className="btn-solid">Enter OREON →</a>
+            <Link to="/platform" className="btn-ghost">Explore the platform</Link>
+          </div>
+        </Reveal>
       </motion.div>
 
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1.2, duration: 1 }}
-        className="absolute bottom-7 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2.5"
+        className="relative z-10 mb-8 flex flex-col items-center gap-2.5 self-center"
       >
         <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--ink-dim)]">Scroll</span>
         <span className="relative block h-10 w-px overflow-hidden bg-white/12">

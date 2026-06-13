@@ -224,6 +224,10 @@ export function useAskMessages(conversationId: string | undefined) {
     queryKey: ["ask-messages", conversationId],
     queryFn: () => askApi.messages(conversationId as string),
     enabled: Boolean(conversationId),
+    // A chat thread must always reflect the latest persisted turn. The global
+    // 30s staleTime would otherwise serve the pre-reply message list from cache
+    // after a follow-up turn, so a 2nd message's reply only appeared on refresh.
+    staleTime: 0,
   });
 }
 
