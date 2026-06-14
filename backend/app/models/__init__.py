@@ -9,6 +9,7 @@ from app.models.role import Role
 from app.models.notification import Notification, NotificationRead
 from app.models.escalation import Escalation, EscalationHistory
 from app.models.sentinel_activity import SentinelActivity, ActivityType
+from app.models.purchase_order import PurchaseOrder
 
 __all__ = [
     "Asset",
@@ -28,4 +29,5 @@ __all__ = [
     "EscalationHistory",
     "SentinelActivity",
     "ActivityType",
+    "PurchaseOrder",
 ]

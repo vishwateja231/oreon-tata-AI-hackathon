@@ -35,6 +35,10 @@ import type {
   PlantGraphResponse,
   AlertsListResponse,
   EscalationsListResponse,
+  PurchaseOrder,
+  PurchaseOrderSummaryData,
+  CreatePurchaseOrderRequest,
+  NudgeRequest,
 } from "./types";
 
 export interface AssetFilters {
@@ -149,6 +153,22 @@ export const decisionApi = {
     http.get<MaintenanceActionSummary[]>("/maintenance-actions", { limit }),
   businessRisks: (limit = 20) =>
     http.get<BusinessRiskSummary[]>("/business-risks", { limit }),
+};
+
+// ----- Purchase Orders -----
+export const purchaseOrdersApi = {
+  list: () => http.get<PurchaseOrder[]>("/purchase-orders"),
+  summary: () => http.get<PurchaseOrderSummaryData>("/purchase-orders/summary"),
+  create: (body: CreatePurchaseOrderRequest) =>
+    http.post<PurchaseOrder>("/purchase-orders", body),
+  advance: (id: number) =>
+    http.patch<PurchaseOrder>(`/purchase-orders/${id}/advance`),
+  nudge: (body: NudgeRequest) =>
+    http.post<{ nudged: boolean; notified_procurement: boolean; part_name: string }>(
+      "/purchase-orders/nudge",
+      body,
+    ),
+  clear: () => http.delete<{ cleared: number }>("/purchase-orders"),
 };
 
 // ----- Ask OREON -----

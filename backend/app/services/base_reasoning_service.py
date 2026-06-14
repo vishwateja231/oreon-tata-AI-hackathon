@@ -19,6 +19,10 @@ class BaseReasoningService:
 
     @property
     def has_llm(self) -> bool:
+        if getattr(self.settings, "LLM_PROVIDER", "") == "groq" and self.settings.GROQ_API_KEY:
+            return True
+        if getattr(self.settings, "LLM_PROVIDER", "") == "deepseek" and self.settings.DEEPSEEK_API_KEY:
+            return True
         return bool(self.settings.OPENROUTER_API_KEY)
 
     def _generate_json(self, prompt: str) -> dict:

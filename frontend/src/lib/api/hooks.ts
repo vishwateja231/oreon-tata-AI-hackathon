@@ -17,6 +17,7 @@ import {
   logbookApi,
   alertsApi,
   escalationsApi,
+  purchaseOrdersApi,
   type AssetFilters,
   type IncidentFilters,
   type SpareFilters,
@@ -170,6 +171,66 @@ export function useProcurementRisks() {
     queryFn: decisionApi.procurementRisks,
     staleTime: 60_000,
     refetchInterval: 60_000,
+  });
+}
+
+// ----- Purchase Orders -----
+export function usePurchaseOrders() {
+  return useQuery({
+    queryKey: ["purchase-orders"],
+    queryFn: purchaseOrdersApi.list,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function usePurchaseOrderSummary() {
+  return useQuery({
+    queryKey: ["purchase-orders", "summary"],
+    queryFn: purchaseOrdersApi.summary,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+function useInvalidatePOs() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+    qc.invalidateQueries({ queryKey: ["procurement-risks"] });
+    qc.invalidateQueries({ queryKey: ["spares"] });
+  };
+}
+
+export function useCreatePurchaseOrder() {
+  const invalidate = useInvalidatePOs();
+  return useMutation({
+    mutationFn: purchaseOrdersApi.create,
+    onSuccess: invalidate,
+  });
+}
+
+export function useAdvancePurchaseOrder() {
+  const invalidate = useInvalidatePOs();
+  return useMutation({
+    mutationFn: (id: number) => purchaseOrdersApi.advance(id),
+    onSuccess: invalidate,
+  });
+}
+
+export function useNudgeProcurement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: purchaseOrdersApi.nudge,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
+  });
+}
+
+export function useClearPurchaseOrders() {
+  const invalidate = useInvalidatePOs();
+  return useMutation({
+    mutationFn: purchaseOrdersApi.clear,
+    onSuccess: invalidate,
   });
 }
 

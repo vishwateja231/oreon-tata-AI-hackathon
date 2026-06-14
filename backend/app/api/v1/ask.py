@@ -178,7 +178,12 @@ def _get_ask_cache_key(role: str, query: str, conversation_id: str | None) -> st
     from app.config.settings import get_settings
     s = get_settings()
     # Key by active provider+model so switching models never serves stale answers.
-    model = s.GROQ_MODEL if getattr(s, "LLM_PROVIDER", "") == "groq" else (s.OPENROUTER_FAST_MODEL or "none")
+    if getattr(s, "LLM_PROVIDER", "") == "groq":
+        model = s.GROQ_MODEL
+    elif getattr(s, "LLM_PROVIDER", "") == "deepseek":
+        model = s.DEEPSEEK_MODEL
+    else:
+        model = s.OPENROUTER_FAST_MODEL or "none"
     hasher = hashlib.sha1(query.strip().lower().encode("utf-8"))
     conv_part = (conversation_id or "none")[:16]
     return f"oreon:ask_endpoint:{model}:{role}:{conv_part}:{hasher.hexdigest()[:20]}"
@@ -422,7 +427,11 @@ def run_ask_logic(
 
     _openrouter_failed = False
     _llm_used = False          # track whether a real LLM response was obtained
-    if has_grounding and settings.OPENROUTER_API_KEY:
+    if has_grounding and (
+        settings.OPENROUTER_API_KEY
+        or (getattr(settings, "LLM_PROVIDER", "") == "groq" and settings.GROQ_API_KEY)
+        or (getattr(settings, "LLM_PROVIDER", "") == "deepseek" and settings.DEEPSEEK_API_KEY)
+    ):
         try:
             history_str = ""
             for m in history_messages:
@@ -500,7 +509,11 @@ def run_ask_logic(
             )
 
             # Use fast model directly — avoids 30-45s ultra model latency in chat
-            model = settings.OPENROUTER_FAST_MODEL or settings.OPENROUTER_VOICE_MODEL or settings.OPENROUTER_MODEL
+            # Resolve model
+            if getattr(settings, "LLM_PROVIDER", "") == "deepseek":
+                model = settings.DEEPSEEK_MODEL
+            else:
+                model = settings.OPENROUTER_FAST_MODEL or settings.OPENROUTER_VOICE_MODEL or settings.OPENROUTER_MODEL
 
             if status_callback:
                 status_callback("Investigating probable causes...")
@@ -555,7 +568,7 @@ def run_ask_logic(
         raise HTTPException(status_code=503, detail="AI is not configured (OPENROUTER_API_KEY/GROQ_API_KEY missing).")
 
     # ── (dead path retained for reference; unreachable under no-fallback policy) ──
-    if has_grounding and (not settings.OPENROUTER_API_KEY or _openrouter_failed):
+    if has_grounding and not _llm_used:
         if assets_context:
             # Sort by failure probability so the most at-risk asset leads
             ranked = sorted(assets_context, key=lambda a: a.failure_probability, reverse=True)
@@ -1051,7 +1064,11 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                 critical = False
                 reasoning = []
 
-                if has_grounding and settings.OPENROUTER_API_KEY:
+                if has_grounding and (
+                    settings.OPENROUTER_API_KEY
+                    or (getattr(settings, "LLM_PROVIDER", "") == "groq" and settings.GROQ_API_KEY)
+                    or (getattr(settings, "LLM_PROVIDER", "") == "deepseek" and settings.DEEPSEEK_API_KEY)
+                ):
                     try:
                         history_str = ""
                         for m in history_messages:
@@ -1137,7 +1154,11 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                         )
 
                         # Use fast model — avoid 30-45s ultra model latency in interactive chat
-                        model = settings.OPENROUTER_FAST_MODEL or settings.OPENROUTER_VOICE_MODEL or settings.OPENROUTER_MODEL
+                        # Resolve model
+                        if getattr(settings, "LLM_PROVIDER", "") == "deepseek":
+                            model = settings.DEEPSEEK_MODEL
+                        else:
+                            model = settings.OPENROUTER_FAST_MODEL or settings.OPENROUTER_VOICE_MODEL or settings.OPENROUTER_MODEL
 
                         yield f"data: {json.dumps({'type': 'status', 'message': 'Investigating probable causes...'})}\n\n"
 

@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
-  CornerDownLeft, FileText, Plus, AlertTriangle, Box,
+  ArrowUp, FileText, Plus, AlertTriangle, Box,
   X, MoreHorizontal, Trash2, Mic, Square,
   ChevronDown, ChevronUp, Upload, FolderOpen,
   ChevronRight, PenSquare, Paperclip,
@@ -878,7 +878,7 @@ function AskPage() {
                     <button onClick={() => send(input)} disabled={!input.trim()}
                       className="size-7 flex items-center justify-center rounded-full bg-foreground text-background hover:bg-foreground/85 disabled:opacity-30 disabled:cursor-not-allowed transition-all shrink-0"
                       title="Send">
-                      <CornerDownLeft className="size-3.5" strokeWidth={2.5} />
+                      <ArrowUp className="size-3.5" strokeWidth={2.5} />
                     </button>
                   )}
                 </div>

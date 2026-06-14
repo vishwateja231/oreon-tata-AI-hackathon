@@ -123,6 +123,18 @@ deploy.sh
 render.yaml
 DEMO_SCRIPT_SHORT.md
 
+# ---- Demo recording artifacts (not part of the product) ----
+MASTER_DEMO_SCRIPT.md
+RECORDING_GUIDE.md
+architecture_explainer.html
+run_demo_backend.ps1
+backend/prestage_demo.py
+# Ad-hoc investigation request/response dumps from manual testing
+backend/inv2.json
+backend/invresp.json
+backend/inv*.json
+backend/*resp.json
+
 
 
 

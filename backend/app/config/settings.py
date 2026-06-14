@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
+    # DeepSeek direct connection
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_MODEL: str = "deepseek-v4-flash"
+    DEEPSEEK_REASONING_MODEL: str = "deepseek-v4-flash"
+
     # RAG: hash-vectors + BM25 + cross-encoder reranker by default (fast, no cold
     # start). Enable bge-m3 semantic embeddings only with a matching index rebuild.
     USE_BGE_EMBEDDINGS: bool = False

@@ -96,7 +96,11 @@ class VoiceAgentService:
         proposed_actions: list[dict[str, Any]] = []
         spoken = ""
 
-        if (self._settings.LLM_PROVIDER == "groq" and self._settings.GROQ_API_KEY) or self._settings.OPENROUTER_API_KEY:
+        if (
+            (self._settings.LLM_PROVIDER == "groq" and self._settings.GROQ_API_KEY)
+            or (self._settings.LLM_PROVIDER == "deepseek" and self._settings.DEEPSEEK_API_KEY)
+            or self._settings.OPENROUTER_API_KEY
+        ):
             try:
                 grounding_for_llm = humanize_asset_refs(grounding, id_to_name)
                 parsed = self._invoke_llm(query, history, role, grounding_for_llm, operator_context)

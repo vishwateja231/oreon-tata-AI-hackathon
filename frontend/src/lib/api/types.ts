@@ -292,6 +292,43 @@ export interface ProcurementRiskSummary {
   procurement_risk: string;
 }
 
+export type POStage = "PENDING_APPROVAL" | "APPROVED" | "SHIPPED" | "RECEIVED";
+
+export interface PurchaseOrder {
+  id: number;
+  po_number: string;
+  part_id: string;
+  part_name: string;
+  qty: number;
+  lead_time_days: number;
+  unit_cost_usd: number | null;
+  order_value_inr: number;
+  stage: POStage;
+  requested_by_role: string | null;
+  supplier: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchaseOrderSummaryData {
+  total: number;
+  open: number;
+  on_order_value_inr: number;
+  total_value_inr: number;
+}
+
+export interface CreatePurchaseOrderRequest {
+  part_id: string;
+  qty: number;
+  requested_by_role?: string;
+}
+
+export interface NudgeRequest {
+  part_id: string;
+  note?: string;
+  from_role?: string;
+}
+
 export interface MaintenanceActionSummary {
   asset_id: string;
   asset_name: string;

@@ -16,6 +16,7 @@ from app.api.v1.stream import router as stream_router
 from app.api.v1.simulation import router as simulation_router
 from app.api.v1.voice import router as voice_router
 from app.api.v1.sentinel import router as sentinel_router
+from app.api.v1.purchase_orders import router as purchase_orders_router
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(assets_router)
@@ -34,4 +35,5 @@ api_router.include_router(stream_router)
 api_router.include_router(simulation_router)
 api_router.include_router(voice_router)
 api_router.include_router(sentinel_router)
+api_router.include_router(purchase_orders_router)
 

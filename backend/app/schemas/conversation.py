@@ -9,7 +9,7 @@ class PinInput(BaseModel):
 
 
 class AskRequest(BaseModel):
-    query: str = Field(min_length=1)
+    query: str = Field(min_length=1, max_length=300)
     conversation_id: Optional[str] = None
     pins: list[PinInput] = Field(default_factory=list)
     role: Optional[str] = None
