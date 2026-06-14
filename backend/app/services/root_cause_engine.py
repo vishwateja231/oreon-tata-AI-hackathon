@@ -24,6 +24,14 @@ class RootCauseEngine:
         snapshot = sensor_analysis.normalized_snapshot
         text = fault_description.lower()
         rules = [
+            # Steel-plant-specific failure modes (gated by equipment type; the final
+            # diagnosis is still chosen by highest confidence across all matches).
+            self._tuyere_burnthrough,
+            self._hearth_refractory_erosion,
+            self._work_roll_spalling,
+            self._cooling_tower_fouling,
+            self._conveyor_belt_slip,
+            # Generic rotating-equipment failure modes.
             self._bearing_wear,
             self._lubrication_failure,
             self._shaft_misalignment,
@@ -66,6 +74,147 @@ class RootCauseEngine:
         result.confidence = adjusted
         result.feedback_adjusted = adjusted != result.base_confidence
         return result
+
+    # ------------------------------------------------------------------ #
+    # Steel-plant-specific failure modes                                  #
+    # ------------------------------------------------------------------ #
+    def _tuyere_burnthrough(self, asset_type: str, text: str, values: dict) -> RootCauseResult | None:
+        """Blast-furnace tuyere cooling failure / coolant ingress into the hearth.
+
+        A copper tuyere losing cooling-water pressure (or a confirmed leak) lets
+        water reach molten iron — a hydrogen-explosion hazard and one of the most
+        severe blast-furnace failure modes.
+        """
+        if "blast furnace" not in asset_type and "furnace" not in asset_type and "tuyere" not in text:
+            return None
+        pressure = values.get("pressure_bar")
+        pressure_drop = pressure is not None and pressure <= 2.5
+        leak_text = any(word in text for word in ["tuyere", "burn-through", "burnthrough", "coolant", "water ingress", "leak"])
+        if not (pressure_drop or leak_text):
+            return None
+        evidence = ["Asset is a blast furnace hearth"]
+        if pressure is not None:
+            evidence.append(f"cooling_water_pressure_bar={pressure}")
+        if leak_text:
+            evidence.append("Fault text references tuyere / coolant / water ingress")
+        return RootCauseResult(
+            root_cause="Tuyere burn-through / coolant ingress",
+            confidence=0.92 if (pressure_drop and leak_text) else 0.88,
+            diagnosis=(
+                "Loss of tuyere cooling-water pressure indicates a burning or cracked copper "
+                "tuyere allowing coolant ingress toward the hearth. This carries an acute "
+                "hydrogen-generation and explosion risk and requires immediate blast reduction."
+            ),
+            evidence=evidence,
+            recommended_actions=[
+                "Reduce hot blast / wind volume and notify the furnace control room immediately",
+                "Isolate and pressure-test the affected tuyere cooling circuit to locate the leak",
+                "Inspect the tuyere with the peep-sight camera; plan tuyere replacement (spare SP-006)",
+                "Check hearth thermocouples and cooling-water return for steam or pressure loss",
+            ],
+        )
+
+    def _hearth_refractory_erosion(self, asset_type: str, text: str, values: dict) -> RootCauseResult | None:
+        """Blast-furnace hearth lining wear shown by rising stave/shell temperatures."""
+        if "blast furnace" not in asset_type and "furnace" not in asset_type:
+            return None
+        temperature = values.get("temperature_c") or 0
+        refractory_text = any(word in text for word in ["hearth", "refractory", "stave", "lining", "erosion", "shell"])
+        if not (temperature >= 110 or refractory_text):
+            return None
+        return RootCauseResult(
+            root_cause="Hearth refractory erosion",
+            confidence=0.86,
+            diagnosis=(
+                "Elevated hearth stave/shell temperatures indicate carbon-brick refractory "
+                "erosion thinning the protective skull. Continued wear risks hearth breakout "
+                "and constrains the remaining furnace campaign life."
+            ),
+            evidence=[f"stave_temperature_c={temperature}", "Hearth/refractory wear signature present"],
+            recommended_actions=[
+                "Increase hearth stave cooling-water flow and verify even circumferential cooling",
+                "Add titanium-bearing burden (e.g. ilmenite) to rebuild the protective hearth skull",
+                "Map stave thermocouples for hot-spot localisation and trend wear rate",
+                "Schedule a hearth reline (refractory brick SP-007) at the next campaign window",
+            ],
+        )
+
+    def _work_roll_spalling(self, asset_type: str, text: str, values: dict) -> RootCauseResult | None:
+        """Hot-strip mill work-roll surface spalling from thermal fatigue / cooling loss."""
+        if "rolling mill" not in asset_type and "mill" not in asset_type and "roll" not in text:
+            return None
+        vibration = values.get("vibration_mms") or 0
+        temperature = values.get("temperature_c") or 0
+        roll_text = any(word in text for word in ["roll", "spall", "strip", "thermal", "crack", "scale", "spray"])
+        if not (vibration >= 4.5 and (roll_text or temperature >= 80)):
+            return None
+        return RootCauseResult(
+            root_cause="Work-roll spalling (thermal fatigue)",
+            confidence=0.85,
+            diagnosis=(
+                "High mill vibration with thermal/roll-surface evidence indicates subsurface "
+                "fatigue cracking of the work roll — typically initiated by roll-cooling spray "
+                "loss and thermal cycling — progressing to surface spalling during high-load passes."
+            ),
+            evidence=[f"vibration_mms={vibration}", f"temperature_c={temperature}", "Work-roll / thermal-shock evidence present"],
+            recommended_actions=[
+                "Inspect the work-roll surface by eddy-current / ultrasonic for subsurface cracks",
+                "Verify the roll-cooling header: check for blocked or misaligned spray nozzles",
+                "Change out and regrind the affected work roll; confirm descaling sprays are functional",
+                "Review the rolling schedule load distribution to limit thermal shock",
+            ],
+        )
+
+    def _cooling_tower_fouling(self, asset_type: str, text: str, values: dict) -> RootCauseResult | None:
+        """Closed-loop cooling-tower fill fouling / scaling reducing heat-transfer efficiency."""
+        if "cooling" not in asset_type and "tower" not in text:
+            return None
+        temperature = values.get("temperature_c") or 0
+        fouling_text = any(word in text for word in ["scal", "foul", "fill", "biological", "legionella", "approach", "efficiency", "algae"])
+        if not (fouling_text or (85 <= temperature < 90)):
+            return None
+        return RootCauseResult(
+            root_cause="Cooling-tower fill fouling / scaling",
+            confidence=0.80,
+            diagnosis=(
+                "Rising approach temperature with fouling evidence indicates calcium-carbonate "
+                "scaling and biological growth on the fill media, reducing heat-transfer "
+                "efficiency and undermining downstream furnace and mill cooling duty."
+            ),
+            evidence=[f"temperature_c={temperature}", "Fill scaling / fouling evidence present"],
+            recommended_actions=[
+                "Inspect and clean or replace fouled fill media; clear the basin and strainers",
+                "Verify anti-scalant and biocide dosing; conduct a Legionella risk assessment",
+                "Check water-treatment conductivity, pH, and blowdown control set-points",
+                "Re-baseline tower approach temperature after cleaning to confirm recovery",
+            ],
+        )
+
+    def _conveyor_belt_slip(self, asset_type: str, text: str, values: dict) -> RootCauseResult | None:
+        """Raw-material belt conveyor slip from pulley-lagging wear / idler misalignment."""
+        if "conveyor" not in asset_type and "belt" not in text:
+            return None
+        current = values.get("current_amps") or 0
+        vibration = values.get("vibration_mms") or 0
+        belt_text = any(word in text for word in ["belt", "slip", "idler", "track", "pulley", "lagging", "spillage"])
+        if not (belt_text or current >= 55 or vibration >= 4.5):
+            return None
+        return RootCauseResult(
+            root_cause="Belt slip / idler misalignment",
+            confidence=0.78,
+            diagnosis=(
+                "Drive-pulley lagging wear combined with return-idler misalignment is causing "
+                "belt slip and progressive tracking failure on the raw-material conveyor, "
+                "starving the downstream furnace/mill feed."
+            ),
+            evidence=[f"current_amps={current}", f"vibration_mms={vibration}", "Belt slip / tracking evidence present"],
+            recommended_actions=[
+                "Inspect drive-pulley lagging for wear or polishing; re-lag if glazed",
+                "Re-tension the gravity take-up and verify counterweight travel",
+                "Align return and carrying idlers; correct belt tracking and clear spillage",
+                "Check the belt splice and skirting for damage at transfer points",
+            ],
+        )
 
     def _bearing_wear(self, asset_type: str, text: str, values: dict) -> RootCauseResult | None:
         vibration = values.get("vibration_mms") or 0

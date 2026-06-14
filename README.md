@@ -4,6 +4,70 @@ OREON (Operations Reliability & Engineering Optimization Network) is a full-stac
 
 It consolidates diverse fragmented data sources—such as equipment manuals, standard operating procedures (SOPs), historical maintenance logs, failure analysis reports, and sensor-based alerts—to deliver real-time anomaly alerts, ML-based Remaining Useful Life (RUL) predictions, NetworkX-driven plant blast-radius tracing, and LangGraph-powered multi-agent diagnostics.
 
+> **Submission note for evaluators:** This document covers every required deliverable —
+> system architecture (§2), technology stack (§1), data & system flow (§3), model design &
+> reasoning pipeline (§4), alerting & prediction logic (§5), assumptions & limitations (§8),
+> install/configure/run guide (§9), and a sample input/output demonstration (§10). The
+> **Requirement Coverage Matrix** below maps each official functional requirement to where it
+> is implemented in the codebase. A guided demo walkthrough is in `DEMO_SCRIPT.md`; the
+> full per-file engineering reference is in `implementation.md`; RAG retrieval benchmarks are
+> in `RAG_EVALUATION_REPORT.md`.
+
+---
+
+## Table of Contents
+
+0. [Requirement Coverage Matrix](#0-requirement-coverage-matrix)
+1. [Technology Stack](#1-technology-stack)
+2. [Decoupled System Architecture](#2-decoupled-system-architecture)
+3. [Data Flow & System Flow](#3-data-flow--system-flow)
+4. [Model Design & Reasoning Pipeline](#4-model-design--reasoning-pipeline)
+5. [Alerting & Prediction Logic](#5-alerting--prediction-logic)
+6. [Knowledge Integration & RAG Pipeline](#6-knowledge-integration--rag-pipeline)
+7. [Role-Based Customization Matrix](#7-role-based-customization-matrix)
+8. [Assumptions & Limitations](#8-assumptions--limitations)
+9. [Installation & Setup Guide](#9-installation--setup-guide)
+10. [Sample Input & Output Demonstration](#10-sample-input--output-demonstration)
+11. [Repository Map & Deliverables](#11-repository-map--deliverables)
+
+---
+
+## 0. Requirement Coverage Matrix
+
+Every functional requirement from the problem statement, mapped to its implementation. This is
+the fastest way to verify completeness.
+
+### Functional Requirements
+
+| # | Required Capability | OREON Implementation | Where |
+|---|---|---|---|
+| **1** | **Contextual reasoning using LLMs/SLMs** | Groq `llama-3.3-70b` (fast tier) + OpenRouter `gpt-4o-mini` (reasoning tier), routed by a complexity classifier. LLM narrates; engines decide. | `llm_router.py`, `complexity_classifier.py`, `*_reasoning_service.py` |
+| **2** | **Knowledge integration** (manuals, SOPs, history, failure reports, logs) | Dual hybrid RAG: ChromaDB dense + BM25 sparse over manual/SOP PDFs, Jaccard incident similarity over the history table, fused with RRF + reranking. | `dual_retrieval_service.py`, `manual_/sop_knowledge_service.py`, `incident_retrieval_service.py` |
+| **3** | **Natural-language, multi-turn interaction** | "Ask OREON" conversational RAG with persistent threads + Ctrl-K palette; autonomous voice agent (STT/TTS). | `api/v1/ask.py`, `api/v1/voice.py`, `models/conversation.py` |
+| **4** | **Explainable, traceable recommendations** | Deterministic engines produce every decision; evidence cards cite the exact sensor reading / manual chunk / SOP / past incident behind each conclusion. | `evidence_engine.py`, `root_cause_engine.py`, investigation timeline |
+| **5** | **Abnormality detection & failure prediction** | Threshold + trend anomaly engine, RandomForest RUL with 80% confidence bounds, always-on Sentinel agent, critical-event escalation at >70% failure prob. | `sensor_analysis_engine.py`, `rul_model_service.py`, `autonomous_agent_service.py`, `critical_event_detector.py` |
+| **6** | **Feedback-driven improvement** | Closed online-learning loop: operator corrections re-calibrate RCA confidence (Laplace-smoothed trust score) and re-rank incidents — no batch retraining. | `feedback_learning_service.py`, `trust_score_engine.py`, `models/decision_feedback.py` |
+| **7** | **Real-time alerting** | SSE telemetry stream + role-routed notifications/escalations (P1/P2/P3) with per-role read state. | `api/v1/stream.py`, `notification_engine.py`, `escalation_engine.py` |
+
+### Expected Outputs
+
+| Output Category | Delivered As | Where |
+|---|---|---|
+| Probable fault diagnosis + RCA | Investigation report with root cause, confidence, evidence | `investigation_service.py` |
+| RUL / remaining-lifecycle prediction | ML forecast in days + confidence interval, severity-capped | `rul_model_service.py` |
+| Early warning of catastrophic failure | Auto-escalation + War Room view on critical events | `critical_event_detector.py`, `warroom.tsx` |
+| Risk classification & urgency | 0–100 priority score → LOW/MEDIUM/HIGH/CRITICAL band | `priority_engine.py` |
+| Bottleneck prioritization (process/delay/spares/lead-time) | 9-factor weighted score incl. NetworkX blast radius | `priority_engine.py`, `plant_impact_engine.py` |
+| Step-by-step maintenance plan + spare strategy | Phased plan (Immediate→Monitoring) + procurement analysis | `maintenance_planner.py`, `procurement_engine.py` |
+| Structured reports | PDF/JSON export, per-asset & plant-wide | `report.py`, `pdf_generator.py` |
+| Digital maintenance logbook | Auto-logged after every investigation + manual entries | `logbook.py`, `models/maintenance_log.py` |
+
+### Optional Enhancements Implemented
+
+Conversational interface · health/anomaly visualization dashboard · simulated IoT telemetry +
+3D digital twin · per-equipment dynamic knowledge base · automatic digital logbook ·
+user-role-based alerts & recommendations — **all six optional enhancements are present.**
+
 ---
 
 ## 1. Technology Stack
@@ -84,7 +148,7 @@ sequenceDiagram
     participant ML as RandomForest ML Service
     participant RAG as Hybrid RAG Engine
     participant LG as LangGraph Orchestrator
-    participant LLM as Gemini / Groq API
+    participant LLM as Groq / OpenRouter API
 
     Engineer->>FE: Trigger Decision Report (Asset_ID)
     FE->>API: POST /api/v1/decision/analyze {asset_id, snapshot}
@@ -169,16 +233,26 @@ The workflow coordinates six specialized agent nodes:
 ---
 
 ### 4.2 Deterministic Root Cause Rules
-The `RootCauseEngine` evaluates eight physical failure conditions using sensor thresholds and operational keywords. The first matching condition wins:
+The `RootCauseEngine` evaluates physical failure conditions using sensor thresholds and operational keywords. Rules are organised in two tiers — **steel-plant-specific failure modes** are evaluated first, then generic rotating-equipment modes — and the highest-confidence match across all of them wins.
 
-1.  **Bearing Wear**: Vibration $\ge 4.5\text{ mm/s}$ AND Temperature $\ge 80^\circ\text{C}$ AND Description contains `bearing`, `noise`, or `grinding`.
-2.  **Lubrication Failure**: Temperature $\ge 85^\circ\text{C}$ AND Description contains `lubrication`, `oil`, `grease`, or `filter`.
-3.  **Shaft Misalignment**: Vibration $\ge 5.0\text{ mm/s}$ AND (Description contains `misalign` or `coupling` OR Current $\ge 55\text{ A}$).
-4.  **Motor Overload**: Asset Type is `motor` AND Current $\ge 55\text{ A}$ AND Temperature $\ge 80^\circ\text{C}$.
-5.  **Cooling Failure**: (Asset ID contains `cooling` OR Description contains `cool` or `temperature`) AND Temperature $\ge 90^\circ\text{C}$.
-6.  **Gearbox Wear**: Asset ID contains `gearbox` AND Vibration $\ge 4.5\text{ mm/s}$ AND Temperature $\ge 80^\circ\text{C}$.
-7.  **Pump Cavitation**: Asset Type is `pump` AND Pressure $\le 2.5\text{ bar}$ AND Vibration $\ge 4.5\text{ mm/s}$ *(Confidence: 0.89)*.
-8.  **Fan Imbalance**: Asset Type is `fan` AND Vibration $\ge 4.5\text{ mm/s}$ AND (Noise $\ge 88\text{ dB}$ OR Description contains `imbalance`).
+**Steel-plant-specific failure modes** (mapped to the real incidents in the plant's history — tuyere fatigue, work-roll spalling, hearth erosion):
+
+1.  **Tuyere Burn-through / Coolant Ingress** *(Blast Furnace)*: Cooling-water pressure $\le 2.5\text{ bar}$ OR fault text references `tuyere`/`coolant`/`water ingress`. Flags the hydrogen-explosion hazard of water reaching molten iron and recommends immediate blast reduction *(Confidence: up to 0.92)*.
+2.  **Hearth Refractory Erosion** *(Blast Furnace)*: Stave temperature $\ge 110^\circ\text{C}$ OR text references `hearth`/`refractory`/`stave`/`lining`. Recommends increased stave cooling, titanium-burden skull rebuild, and campaign-end reline *(Confidence: 0.86)*.
+3.  **Work-roll Spalling (Thermal Fatigue)** *(Rolling Mill)*: Vibration $\ge 4.5\text{ mm/s}$ AND (roll/strip/thermal evidence OR Temperature $\ge 80^\circ\text{C}$). Points to roll-cooling spray loss and subsurface fatigue cracking *(Confidence: 0.85)*.
+4.  **Cooling-tower Fill Fouling / Scaling** *(Cooling System)*: Fouling/scaling/approach-temperature evidence. Recommends fill cleaning, anti-scalant/biocide dosing, and Legionella risk assessment *(Confidence: 0.80)*.
+5.  **Belt Slip / Idler Misalignment** *(Conveyor)*: Belt/idler/pulley-lagging evidence OR Current $\ge 55\text{ A}$ OR Vibration $\ge 4.5\text{ mm/s}$. Diagnoses drive-pulley lagging wear starving the downstream furnace/mill feed *(Confidence: 0.78)*.
+
+**Generic rotating-equipment failure modes:**
+
+6.  **Bearing Wear**: Vibration $\ge 4.5\text{ mm/s}$ AND Temperature $\ge 80^\circ\text{C}$ AND Description contains `bearing`, `noise`, or `grinding`.
+7.  **Lubrication Failure**: Temperature $\ge 85^\circ\text{C}$ AND Description contains `lubrication`, `oil`, `grease`, or `filter`.
+8.  **Shaft Misalignment**: Vibration $\ge 5.0\text{ mm/s}$ AND (Description contains `misalign` or `coupling` OR Current $\ge 55\text{ A}$).
+9.  **Motor Overload**: Asset Type is `motor` AND Current $\ge 55\text{ A}$ AND Temperature $\ge 80^\circ\text{C}$.
+10. **Cooling Failure**: (Asset ID contains `cooling` OR Description contains `cool` or `temperature`) AND Temperature $\ge 90^\circ\text{C}$.
+11. **Gearbox Wear**: Asset ID contains `gearbox` AND Vibration $\ge 4.5\text{ mm/s}$ AND Temperature $\ge 80^\circ\text{C}$.
+12. **Pump Cavitation**: Asset Type is `pump` AND Pressure $\le 2.5\text{ bar}$ AND Vibration $\ge 4.5\text{ mm/s}$ *(Confidence: 0.89)*.
+13. **Fan Imbalance**: Asset Type is `fan` AND Vibration $\ge 4.5\text{ mm/s}$ AND (Noise $\ge 88\text{ dB}$ OR Description contains `imbalance`).
 
 *Fallback*: `"Undetermined industrial fault"` (Confidence: 0.35).
 
@@ -348,9 +422,12 @@ python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# Create backend/.env and populate your keys:
-# DATABASE_URL=postgresql://user:pass@localhost:5432/oreon
-# GEMINI_API_KEY=AIzaSy...
+# Create backend/.env (copy from ../.env.example) and populate your keys:
+# DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/oreon
+# LLM_PROVIDER=groq                          # "groq" (fast, free) or "openrouter"
+# GROQ_API_KEY=gsk_...                        # https://console.groq.com  (free tier)
+# OPENROUTER_API_KEY=sk-or-...                # https://openrouter.ai/keys (fallback)
+# DEEPGRAM_API_KEY=...                        # optional — voice STT/TTS
 
 # Run database schema migrations
 alembic upgrade head
@@ -454,3 +531,43 @@ Response payload:
   }
 }
 ```
+
+> A fuller, click-through walkthrough of inputs and expected outputs (per screen and per
+> endpoint) is provided in **`DEMO_SCRIPT.md`**, and the interactive Swagger UI at
+> `http://localhost:8000/docs` lets evaluators run every endpoint live against seeded data.
+
+---
+
+## 11. Repository Map & Deliverables
+
+### What's in this submission
+
+| Path | Contents |
+|---|---|
+| `backend/` | FastAPI service — 17 routers, 42 services, 12 DB models, deterministic engines, RAG, ML, Sentinel agent |
+| `frontend/` | TanStack Start (React 19) console — 19 pages, 3D twin, voice agent, role-tailored dashboards |
+| `backend/data/` | Seed data — 25+ assets, 100+ incidents, 40+ spare parts, sensor history, plant graph |
+| `docker-compose.yml`, `deploy.sh` | One-command containerized launch |
+| `README.md` | **This document** — the consolidated architecture & operations guide |
+| `implementation.md` | Exhaustive per-file engineering reference (every route, service, model) |
+| `DEMO_SCRIPT.md` | Guided demo narrative with sample inputs/outputs for the screen recording |
+| `RAG_EVALUATION_REPORT.md` | Retrieval quality benchmarks |
+| `SETUP.md` | Detailed local (non-Docker) run instructions |
+
+### Deliverables checklist (per problem statement §9)
+
+- [x] **Detailed source code of working prototype** — `backend/` + `frontend/`, runs via `./deploy.sh`
+- [x] **System architecture** — §2 + architecture diagrams (`/architecture` page renders them live)
+- [x] **Technology stack** — §1
+- [x] **Data flow & system flow** — §3 (sequence diagram)
+- [x] **Model design & reasoning pipeline** — §4
+- [x] **Alerting & prediction logic** — §5
+- [x] **Assumptions & limitations** — §8
+- [x] **Install / configure / run documentation** — §9 + `SETUP.md`
+- [x] **Sample input & output demonstration** — §10 + `DEMO_SCRIPT.md` + Swagger `/docs`
+- [ ] **Screen recording** — record the flow in `DEMO_SCRIPT.md` and include in the final ZIP
+
+---
+
+*OREON — built to shift steel-plant maintenance from reactive firefighting to proactive,
+explainable, data-driven decision-making.*

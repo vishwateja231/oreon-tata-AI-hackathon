@@ -151,5 +151,22 @@
     "manufacturer": "Camfil",
     "model_number": "Gold-Series-PJF",
     "installation_year": 2021
+  },
+  {
+    "id": "BlastFurnace_BF2",
+    "name": "Blast Furnace Hearth #2",
+    "equipment_type": "Blast Furnace",
+    "location": "Bay-B / Smelting Bay",
+    "criticality": "critical",
+    "production_line": "PL-1",
+    "health_score": 56.0,
+    "failure_probability": 0.47,
+    "rul_days": 62,
+    "status": "degraded",
+    "last_maintenance_date": "2025-09-22",
+    "description": "1.8 kt/day ironmaking blast furnace; condition monitored via hearth stave thermocouples and tuyere cooling-water pressure. Hearth refractory is mid-campaign with gradually rising stave temperatures.",
+    "manufacturer": "Paul Wurth (SMS group)",
+    "model_number": "BF-Hearth-2200",
+    "installation_year": 2015
   }
 ]

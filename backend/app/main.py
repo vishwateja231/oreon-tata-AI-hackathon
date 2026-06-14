@@ -202,16 +202,15 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 @app.middleware("http")
-async def rbac_middleware(request: Request, call_next):
-    # OPTIONS requests bypass RBAC checks
+async def security_headers_middleware(request: Request, call_next):
+    # CORS preflight is handled by CORSMiddleware; pass it straight through.
     if request.method == "OPTIONS":
         return await call_next(request)
 
-    role = request.headers.get("X-Oreon-Role")
-    path = request.url.path
-
-    # (RBAC check for operator removed for local testing / hackathon)
-
+    # Note: role-based access is intentionally advisory in this build — the
+    # `X-Oreon-Role` header drives client-side personalisation, but the API does
+    # not block any role (login is cosmetic; see CLAUDE.md). Hardening response
+    # headers are still applied to every request below.
     response = await call_next(request)
     # Security headers on every response.
     response.headers["X-Content-Type-Options"] = "nosniff"
