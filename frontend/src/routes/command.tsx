@@ -915,22 +915,41 @@ function Command() {
               </div>
             </div>
             <div className="col-span-12 lg:col-span-5 relative flex flex-col justify-center">
-              <div className="label mb-3">Shift SLA Timers</div>
-              <div className="space-y-3 font-mono text-[11px]">
-                {escalations.filter((e: any) => !e.resolved).slice(0, 3).map((esc: any, idx) => (
-                  <div key={esc.id} className="p-2.5 bg-surface-2 rounded border border-border">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="font-bold">{assetNames[esc.asset_id] || esc.asset_id}</span>
-                      <span className="text-rose-400 font-semibold">{idx === 0 ? "24m left" : "3h 15m left"}</span>
+              <div className="flex items-center justify-between mb-3">
+                <div className="label">Shift SLA Timers</div>
+                <span className="font-mono text-[9px] uppercase tracking-wider text-text-muted/70">Response window</span>
+              </div>
+              <div className="border border-border bg-surface-2/30 divide-y divide-border/60">
+                {escalations.filter((e: any) => !e.resolved).slice(0, 3).map((esc: any, idx) => {
+                  const isCritical = esc.escalation_level === "critical" || idx === 0;
+                  const tone = isCritical ? "var(--state-crit)" : "var(--state-warn)";
+                  const remainingPct = isCritical ? 14 : 78;
+                  const timeLeft = isCritical ? "24m" : "3h 15m";
+                  return (
+                    <div key={esc.id} className="relative pl-4 pr-3.5 py-3">
+                      <span className="absolute left-0 top-0 bottom-0 w-[2px]" style={{ backgroundColor: tone }} />
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {isCritical && (
+                            <span className="size-1.5 rounded-full shrink-0 animate-pulse" style={{ backgroundColor: tone }} />
+                          )}
+                          <span className="font-mono text-[11px] text-foreground truncate">
+                            {assetNames[esc.asset_id] || esc.asset_id}
+                          </span>
+                        </div>
+                        <span className="font-mono text-[10px] tabular-nums font-semibold shrink-0" style={{ color: tone }}>
+                          {timeLeft} <span className="text-text-muted font-normal">left</span>
+                        </span>
+                      </div>
+                      <div className="h-[3px] w-full bg-background overflow-hidden">
+                        <div className="h-full transition-all duration-500" style={{ width: `${remainingPct}%`, backgroundColor: tone, boxShadow: `0 0 8px ${tone}` }} />
+                      </div>
                     </div>
-                    <div className="w-full bg-background h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-rose-500 h-1.5 rounded-full" style={{ width: idx === 0 ? "15%" : "80%" }} />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {activeEscalationsCount === 0 && (
-                  <div className="text-center p-6 text-text-muted italic bg-surface-2 rounded border border-border">
-                    No active shift SLA timers.
+                  <div className="px-4 py-6 text-center font-mono text-[10px] uppercase tracking-wider text-text-muted">
+                    No active shift SLA timers
                   </div>
                 )}
               </div>
