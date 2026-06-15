@@ -55,12 +55,20 @@ def load_all() -> None:
     try:
         from app.models.asset import Asset
         from sqlalchemy import select, func
+        from app.services.asset_service import AssetService
         asset_count = db.scalar(select(func.count()).select_from(Asset)) or 0
         if asset_count > 0:
-            logger.info("Database already seeded (found %d assets). Skipping data load.", asset_count)
+            # Already seeded: don't reload incidents/sensors (avoids duplicates), but DO
+            # refresh asset vitals from assets.json. The live sensor simulation drifts
+            # health down and persists it to the DB, so without this an already-seeded
+            # plant would ratchet toward failure forever and never recover the intended
+            # health spread. Re-applying the seed gives a deterministic starting state.
+            assets = _parse_dates(_load_json("assets.json"), ["last_maintenance_date"])
+            if assets:
+                count = AssetService(db).refresh_vitals(assets)
+                logger.info("Database already seeded (found %d assets). Refreshed vitals for %d assets.", asset_count, count)
             return
 
-        from app.services.asset_service import AssetService
         from app.services.incident_service import IncidentService
         from app.services.spare_part_service import SparePartService
         from app.services.sensor_service import SensorService

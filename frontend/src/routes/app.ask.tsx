@@ -978,6 +978,24 @@ function fmtId(text: string): string {
   return (text || "").replace(/\b([A-Za-z][A-Za-z0-9]*)_([A-Za-z0-9]+)\b/g, "$1 $2");
 }
 
+// Lightweight inline markdown for short LLM strings (evidence / recommended / reasoning),
+// which aren't run through the full <Markdown> renderer. Turns **bold** into real bold so
+// the literal asterisks don't show; plain text passes through untouched.
+function InlineMd({ text }: { text: string }) {
+  const parts = (text || "").split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        /^\*\*[^*]+\*\*$/.test(p) ? (
+          <strong key={i} className="font-semibold text-foreground">{p.slice(2, -2)}</strong>
+        ) : (
+          <span key={i}>{p}</span>
+        )
+      )}
+    </>
+  );
+}
+
 const CRITICAL_WORDS = [
   "critical",
   "breach",
@@ -1124,7 +1142,7 @@ function AssistantMsg({
                           const badge = isInc ? "text-amber-400/80 bg-amber-400/8 border-amber-400/20" : isSop ? "text-violet/80 bg-violet/8 border-violet/20" : "text-cyan/80 bg-cyan/8 border-cyan/20";
                           return (
                             <div key={k} className={`px-4 py-3 border-b border-border/20 last:border-0 border-l-2 ${lb}`}>
-                              <div className="text-[12px] text-foreground/80 leading-relaxed">{fmtId(e.text)}</div>
+                              <div className="text-[12px] text-foreground/80 leading-relaxed"><InlineMd text={fmtId(e.text)} /></div>
                               <span className={`inline-flex mt-2 font-mono text-[9px] border rounded px-2 py-0.5 leading-none ${badge}`}>{e.src}</span>
                             </div>
                           );
@@ -1136,7 +1154,7 @@ function AssistantMsg({
                         <div className={`font-mono text-[9px] uppercase tracking-widest mb-2 font-semibold ${critical ? "text-red-400" : "text-cyan/80"}`}>
                           {critical ? "⚠  Recommended Action" : "Recommended Action"}
                         </div>
-                        <div className="text-[13px] text-foreground/85 leading-relaxed">{fmtId(recommended)}</div>
+                        <div className="text-[13px] text-foreground/85 leading-relaxed"><InlineMd text={fmtId(recommended)} /></div>
                       </div>
                     )}
                     {reasoning && reasoning.length > 0 && (
@@ -1144,7 +1162,7 @@ function AssistantMsg({
                         {reasoning.map((c) => (
                           <div key={c.t} className="rounded-lg border border-border/40 bg-surface-2/25 px-3.5 py-3">
                             <div className="font-mono text-[9px] uppercase tracking-widest text-text-muted mb-1">{c.t}</div>
-                            <div className="text-[11px] text-foreground/65 leading-relaxed">{c.d}</div>
+                            <div className="text-[11px] text-foreground/65 leading-relaxed"><InlineMd text={fmtId(c.d)} /></div>
                           </div>
                         ))}
                       </div>

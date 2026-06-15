@@ -95,3 +95,34 @@ class AssetService:
             count += 1
         self._db.commit()
         return count
+
+    # Vital fields refreshed on each boot to restore the seeded health spread (the live
+    # sensor sim drifts health down and persists it, so existing rows would otherwise
+    # ratchet toward failure and never recover). Static fields (name, location, etc.)
+    # are intentionally left untouched so any later edits are preserved.
+    _VITAL_FIELDS = ("health_score", "failure_probability", "rul_days", "status")
+
+    def refresh_vitals(self, assets: list[dict]) -> int:
+        """Re-apply the seed health/risk/RUL/status to already-existing assets.
+
+        Only the vital display fields are updated; assets not yet in the DB are skipped
+        (the full seed path creates those on first run).
+        """
+        count = 0
+        for data in assets:
+            existing = self._db.get(Asset, data["id"])
+            if not existing:
+                continue
+            for k in self._VITAL_FIELDS:
+                if k not in data:
+                    continue
+                v = data[k]
+                if k == "status" and isinstance(v, str):
+                    try:
+                        v = AssetStatus(v)
+                    except ValueError:
+                        continue
+                setattr(existing, k, v)
+            count += 1
+        self._db.commit()
+        return count
