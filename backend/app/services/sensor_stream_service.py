@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from app.models.asset import Asset, AssetStatus
+from app.models.asset import Asset
 from app.services.notification_engine import NotificationEngine
 from app.services.demo_simulation_service import DemoSimulationService
 
@@ -235,21 +235,14 @@ class SensorStreamService:
             message = f"Calculated asset health index has deteriorated to {health:.1f}%."
             target_roles = ["plant_manager", "reliability_engineer", "supervisor", "maintenance_engineer", "procurement_officer"]
 
-        # Always sync health to DB so the dashboard API reflects live recovery
-        asset.health_score = int(health)
-        # Auto-recover failure probability if health is good
-        if health >= 90:
-            asset.failure_probability = max(0.05, asset.failure_probability - 0.05)
-        elif health >= 75:
-            asset.failure_probability = max(0.2, asset.failure_probability - 0.02)
-        
-        if health < 50:
-            asset.status = AssetStatus.CRITICAL
-        elif health < 75:
-            asset.status = AssetStatus.DEGRADED
-        else:
-            asset.status = AssetStatus.OPERATIONAL
-        self._db.commit()
+        # NOTE: the live telemetry stream is an ephemeral, in-memory overlay — it must
+        # NOT persist its drifting health back to the database. Writing every tick made
+        # each asset ratchet toward failure (each slightly-lower value became the next
+        # boot's baseline) and let multiple backends sharing one Supabase drag each other
+        # down, so the curated health spread never held. The DB health_score is the
+        # canonical baseline (re-applied from assets.json at startup); the alerts below
+        # are still raised from the live values, but they no longer mutate the DB.
+        # (Scripted demo escalations still write the DB directly in DemoSimulationService.)
 
         if triggered and severity:
             self._last_alert_time[asset_id] = current_time

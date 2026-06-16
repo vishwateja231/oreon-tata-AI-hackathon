@@ -67,6 +67,13 @@ def load_all() -> None:
             if assets:
                 count = AssetService(db).refresh_vitals(assets)
                 logger.info("Database already seeded (found %d assets). Refreshed vitals for %d assets.", asset_count, count)
+                # Re-anchor the live sensor sim to the freshly-restored baselines so the
+                # SSE feed reflects them immediately and never re-anchors to stale values.
+                try:
+                    from app.services.sensor_stream_service import SensorStreamService
+                    SensorStreamService._asset_states.clear()
+                except Exception:  # pragma: no cover - defensive
+                    pass
             return
 
         from app.services.incident_service import IncidentService

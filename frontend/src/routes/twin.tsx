@@ -117,7 +117,7 @@ const MODES: { v: TwinMode; label: string; I: any }[] = [
 ];
 
 function Twin() {
-  const [mode, setMode] = useState<TwinMode>("health");
+  const [mode, setMode] = useState<TwinMode>("topology");
   const [is3D, setIs3D] = useState(true);
   const [selected, setSelected] = useState<Asset | null>(null);
   const [timeShift, setTimeShift] = useState<number>(0);
