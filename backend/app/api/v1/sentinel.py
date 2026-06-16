@@ -1,6 +1,7 @@
 """Sentinel API — exposes autonomous agent status, activities, and controls."""
 
 import logging
+import threading
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -15,50 +16,44 @@ from app.services.autonomous_agent_service import SentinelState, run_sentinel_cy
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sentinel", tags=["Sentinel"])
 
+# Guards the manual trigger so overlapping clicks don't run concurrent cycles.
+# (SentinelState.running can't serve as this lock — run_cycle keeps it True.)
+_trigger_lock = threading.Lock()
+
 
 @router.get("/status")
 def get_status(db: Session = Depends(get_db)):
-    """Current sentinel operational status — combines in-memory state with DB counts."""
-    from app.models.asset import Asset
+    """Current sentinel operational snapshot.
 
-    assets_monitored = len(SentinelState._last_asset_state)
-    if assets_monitored == 0:
-        assets_monitored = db.scalar(select(func.count()).select_from(Asset)) or 0
+    The headline cards are a real current-state funnel derived from live asset
+    health — not a 1:1:1 pipeline counter (which made every card read the same
+    number). Each metric is a distinct, deterministic count from the asset table:
+        monitored ≥ anomalies ≥ alerts ≥ investigations ≥ escalations.
+    """
+    from app.models.asset import Asset, AssetStatus
 
-    # Pull counts from DB if in-memory state is empty (server just started)
-    anomalies = SentinelState.anomalies_detected
-    alerts = SentinelState.alerts_generated
-    investigations = SentinelState.investigations_created
-    escalations = SentinelState.escalations_triggered
+    def cnt(stmt) -> int:
+        return db.scalar(stmt) or 0
+
+    assets_monitored = cnt(select(func.count()).select_from(Asset))
+    # Any asset off "operational" is showing an anomaly signal.
+    anomalies = cnt(
+        select(func.count()).select_from(Asset).where(Asset.status != AssetStatus.OPERATIONAL)
+    )
+    # Critical-status assets raise an operator alert.
+    alerts = cnt(
+        select(func.count()).select_from(Asset).where(Asset.status == AssetStatus.CRITICAL)
+    )
+    # Elevated failure probability opens an investigation; high probability escalates.
+    investigations = cnt(
+        select(func.count()).select_from(Asset).where(Asset.failure_probability >= 0.4)
+    )
+    escalations = cnt(
+        select(func.count()).select_from(Asset).where(Asset.failure_probability >= 0.6)
+    )
+
+    # Scan cycles are a lifetime tally tracked in-memory for the running process.
     scan_count = SentinelState.scan_count
-
-    if anomalies == 0 and scan_count == 0:
-        # Fall back to DB counts
-        anomalies = db.scalar(
-            select(func.count()).select_from(SentinelActivity)
-            .where(SentinelActivity.activity_type == ActivityType.anomaly_detected)
-        ) or 0
-        alerts = db.scalar(
-            select(func.count()).select_from(SentinelActivity)
-            .where(SentinelActivity.activity_type == ActivityType.alert_created)
-        ) or 0
-        investigations = db.scalar(
-            select(func.count()).select_from(SentinelActivity)
-            .where(SentinelActivity.activity_type == ActivityType.investigation_started)
-        ) or 0
-        escalations = db.scalar(
-            select(func.count()).select_from(SentinelActivity)
-            .where(SentinelActivity.activity_type == ActivityType.escalation_created)
-        ) or 0
-        # If DB has data, there was at least 1 scan
-        total_db = db.scalar(select(func.count()).select_from(SentinelActivity)) or 0
-        if total_db > 0:
-            health_checks = db.scalar(
-                select(func.count()).select_from(SentinelActivity)
-                .where(SentinelActivity.activity_type == ActivityType.health_check)
-            ) or 0
-            # Estimate from health checks (1 per asset per scan)
-            scan_count = max(1, health_checks // max(assets_monitored, 1))
 
     return {
         "running": SentinelState.running or scan_count > 0,
@@ -194,8 +189,24 @@ def get_timeline(
 
 
 @router.post("/trigger")
-async def trigger_scan():
-    """Manually trigger a full sentinel scan cycle (runs in background thread)."""
-    import asyncio
-    result = await asyncio.to_thread(run_sentinel_cycle)
-    return {"triggered": True, "result": result}
+def trigger_scan():
+    """Kick off a full sentinel scan in the background and return immediately.
+
+    A full cycle does many DB round-trips (several seconds); running it inline would
+    freeze the button and risk gateway timeouts in production. We launch it on a
+    daemon thread and let the dashboard's polling surface the new numbers. A
+    non-blocking lock prevents overlapping triggers from double-running.
+    """
+    if not _trigger_lock.acquire(blocking=False):
+        return {"triggered": False, "status": "already_running"}
+
+    def _run() -> None:
+        try:
+            run_sentinel_cycle()
+        except Exception as exc:  # never let a worker thread die silently
+            logger.error("Manual sentinel trigger failed: %s", exc)
+        finally:
+            _trigger_lock.release()
+
+    threading.Thread(target=_run, name="sentinel-trigger", daemon=True).start()
+    return {"triggered": True, "status": "running"}

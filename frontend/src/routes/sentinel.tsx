@@ -75,6 +75,25 @@ function SentinelCenter() {
   const activities = useSentinelActivities(queryFilters);
   const triggerMutation = useTriggerSentinel();
 
+  // The scan now runs in the background (returns instantly), so hold a local
+  // "scanning" state for the cycle's duration and refresh the views when it lands.
+  const [scanning, setScanning] = useState(false);
+  const runScan = () => {
+    if (scanning) return;
+    setScanning(true);
+    triggerMutation.mutate(undefined, {
+      onSettled: () => {
+        setTimeout(() => {
+          status.refetch();
+          stats.refetch();
+          timeline.refetch();
+          activities.refetch();
+          setScanning(false);
+        }, 18_000);
+      },
+    });
+  };
+
   const s = status.data;
   const st = stats.data;
 
@@ -125,12 +144,12 @@ function SentinelCenter() {
             )}
           </div>
           <button
-            onClick={() => triggerMutation.mutate()}
-            disabled={triggerMutation.isPending}
+            onClick={runScan}
+            disabled={scanning}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-cyan/10 border border-cyan/20 hover:bg-cyan/20 text-cyan text-[10px] font-mono uppercase tracking-wider transition-colors disabled:opacity-50"
           >
             <Play className="size-3" strokeWidth={2} />
-            {triggerMutation.isPending ? "Scanning..." : "Trigger Scan"}
+            {scanning ? "Scanning..." : "Trigger Scan"}
           </button>
         </div>
 
@@ -184,10 +203,11 @@ function SentinelCenter() {
                   <p className="text-[12px] text-text-muted text-center">Sentinel is initializing.</p>
                   <p className="text-[11px] text-text-muted mt-1 text-center">First scan will populate this timeline.</p>
                   <button
-                    onClick={() => triggerMutation.mutate()}
-                    className="mt-3 px-3 py-1.5 rounded-md bg-cyan/10 border border-cyan/20 text-cyan text-[10px] font-mono uppercase"
+                    onClick={runScan}
+                    disabled={scanning}
+                    className="mt-3 px-3 py-1.5 rounded-md bg-cyan/10 border border-cyan/20 text-cyan text-[10px] font-mono uppercase disabled:opacity-50"
                   >
-                    Run First Scan
+                    {scanning ? "Scanning..." : "Run First Scan"}
                   </button>
                 </div>
               )}

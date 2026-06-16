@@ -600,13 +600,13 @@ export function Shell({ children, title, subtitle }: { children: ReactNode; titl
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setDropdownOpen((v) => !v)}
-                className="inline-flex items-center gap-2 h-8 pl-2.5 pr-2 rounded-lg border border-border bg-surface-2 hover:bg-surface-2/80 transition-all duration-150 cursor-pointer focus:outline-none focus:ring-1"
+                className="inline-flex items-center gap-2 h-8 w-56 pl-2.5 pr-2 rounded-lg border border-border bg-surface-2 hover:bg-surface-2/80 transition-all duration-150 cursor-pointer focus:outline-none focus:ring-1"
                 style={{
                   outlineColor: "color-mix(in oklch, var(--primary) 30%, transparent)"
                 }}
               >
                 <span
-                  className="size-5 rounded-md flex items-center justify-center transition-colors duration-200"
+                  className="size-5 rounded-md flex items-center justify-center transition-colors duration-200 shrink-0"
                   style={{
                     backgroundColor: "color-mix(in oklch, var(--primary) 10%, transparent)"
                   }}
@@ -617,8 +617,8 @@ export function Shell({ children, title, subtitle }: { children: ReactNode; titl
                     strokeWidth={2}
                   />
                 </span>
-                <span className="text-[12px] font-medium text-foreground">{currentRole.label}</span>
-                <ChevronDown className={`size-3.5 text-text-muted transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
+                <span className="text-[12px] font-medium text-foreground truncate flex-1 text-left">{currentRole.label}</span>
+                <ChevronDown className={`size-3.5 text-text-muted transition-transform duration-200 shrink-0 ${dropdownOpen ? "rotate-180" : ""}`} />
               </button>
 
               <AnimatePresence>
@@ -628,7 +628,7 @@ export function Shell({ children, title, subtitle }: { children: ReactNode; titl
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -4, scale: 0.97 }}
                     transition={{ duration: 0.15, ease: "easeOut" }}
-                    className="absolute right-0 top-[calc(100%+6px)] z-50 w-52 rounded-lg border border-border bg-surface-1 shadow-xl shadow-black/30 overflow-hidden"
+                    className="absolute right-0 top-[calc(100%+6px)] z-50 w-56 rounded-lg border border-border bg-surface-1 shadow-xl shadow-black/30 overflow-hidden"
                   >
                     <div className="px-3 pt-2.5 pb-1.5">
                       <span className="text-[10px] font-medium tracking-[0.1em] uppercase text-text-muted">Switch Role</span>

@@ -5,7 +5,7 @@ import {
   ArrowUp, FileText, Plus, AlertTriangle, Box,
   X, MoreHorizontal, Trash2, Mic, Square,
   ChevronDown, ChevronUp, Upload, FolderOpen,
-  ChevronRight, PenSquare, Paperclip,
+  ChevronRight, PenSquare, Paperclip, ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import Markdown from "react-markdown";
 import { Shell } from "@/components/oreon/shell";
@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { z } from "zod";
 import {
   useAskHistory, useAskMessages, useAssets, useIncidents,
-  useActiveRole, useDeleteConversation,
+  useActiveRole, useDeleteConversation, useSubmitFeedback,
 } from "@/lib/api/hooks";
 import { askApi } from "@/lib/api/endpoints";
 import { useOREONContext } from "@/lib/context-store";
@@ -466,9 +466,11 @@ function AskPage() {
     }
     setStreamingResult(null);
     setStreamingStatus(undefined);
+    setStreamingText("");
     setPendingUserMsg(null);
     setPendingPins([]);
-    setSendError("Request cancelled by user.");
+    // Silent cancel — a user-initiated stop is not an error, so show no banner.
+    setSendError(null);
   }, []);
 
   useEffect(() => {
@@ -492,8 +494,14 @@ function AskPage() {
   const [streamingResult, setStreamingResult] = useState<null | {
     diagnosis: string; evidence: { text: string; src: string }[];
     recommended: string; confidence: number; critical?: boolean;
+    risk_level?: string | null;
     reasoning?: { t: string; d: string }[];
   }>(null);
+  // Accumulated word-by-word tokens for the "flowing" answer before the full card lands.
+  const [streamingText, setStreamingText] = useState("");
+  // Per-message feedback state (keyed by rendered-thread index): the value submitted.
+  const [feedbackGiven, setFeedbackGiven] = useState<Record<number, "helpful" | "not_helpful">>({});
+  const submitFeedback = useSubmitFeedback();
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -510,6 +518,9 @@ function AskPage() {
   // Length of the saved thread when the current send started — lets the optimistic
   // (pending) bubble hide exactly when the persisted messages arrive, with no flash.
   const dbLenRef = useRef(0);
+  const prevDbLength = useRef(dbMessages.length);
+  const prevPendingUser = useRef(pendingUserMsg);
+  const prevActiveId = useRef(activeId);
   const sentAtLenRef = useRef(0);
   useEffect(() => { dbLenRef.current = dbMessages.length; }, [dbMessages]);
 
@@ -565,6 +576,7 @@ function AskPage() {
     setPendingPins(snapshotPins);
     setStreamingStatus("Connecting...");
     setStreamingResult(null);
+    setStreamingText("");
     setContextOpen(false);
 
     const controller = new AbortController();
@@ -588,14 +600,20 @@ function AskPage() {
         (event) => {
           if (event.type === "status") {
             setStreamingStatus(event.message);
+          } else if (event.type === "token" && event.text) {
+            // Flowing answer: append tokens as they arrive and drop the status line.
+            setStreamingStatus(undefined);
+            setStreamingText((prev) => prev + event.text);
           } else if (event.type === "result" && event.data) {
             finalConvId = event.data.conversation_id;
+            setStreamingText("");
             setStreamingResult({
               diagnosis: event.data.diagnosis,
               evidence: event.data.evidence ?? [],
               recommended: event.data.recommended,
               confidence: event.data.confidence,
               critical: event.data.critical,
+              risk_level: event.data.risk_level ?? null,
               reasoning: event.data.reasoning ?? [],
             });
             setStreamingStatus(undefined);
@@ -635,6 +653,7 @@ function AskPage() {
       // A failed turn: drop the optimistic bubble so the user can cleanly retry.
       setStreamingResult(null);
       setStreamingStatus(undefined);
+      setStreamingText("");
       setPendingUserMsg(null);
       setPendingPins([]);
     } finally {
@@ -664,10 +683,66 @@ function AskPage() {
   }, [initialQ]);
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [dbMessages, pendingUserMsg, streamingResult]);
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const dbChanged = dbMessages.length !== prevDbLength.current;
+    const pendingChanged = pendingUserMsg !== prevPendingUser.current;
+    const activeIdChanged = activeId !== prevActiveId.current;
+    
+    prevDbLength.current = dbMessages.length;
+    prevPendingUser.current = pendingUserMsg;
+    prevActiveId.current = activeId;
+
+    // Check if user is currently near the bottom
+    const threshold = 150; // pixels from the bottom
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+
+    // If switching conversations, scroll to the top
+    if (activeIdChanged) {
+      container.scrollTo({ top: 0, behavior: "auto" });
+      return;
+    }
+
+    // If it's a new message sent by the user, scroll smoothly to the bottom
+    if (pendingChanged && pendingUserMsg) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      return;
+    }
+
+    // If history messages changed (e.g., conversation completed), scroll only if they were already at the bottom
+    if (dbChanged) {
+      if (isAtBottom) {
+        container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+      }
+      return;
+    }
+
+    // During active streaming, only auto-scroll if the user is already at the bottom
+    if (streamingText || streamingResult) {
+      if (isAtBottom) {
+        // Use instant "auto" scroll during streaming to avoid animation jitter
+        container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+      }
+    }
+  }, [dbMessages, pendingUserMsg, streamingResult, streamingText]);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const handleFeedback = useCallback(
+    (idx: number, qa: { confidence?: number; diagnosis?: string }, value: "helpful" | "not_helpful") => {
+      if (feedbackGiven[idx]) return;
+      setFeedbackGiven((prev) => ({ ...prev, [idx]: value }));
+      submitFeedback.mutate({
+        decision_type: "ask",
+        feedback_value: value,
+        asset_id: activeAssetId || undefined,
+        predicted_confidence: qa?.confidence,
+        user_comments: typeof qa?.diagnosis === "string" ? qa.diagnosis.slice(0, 200) : undefined,
+      });
+    },
+    [feedbackGiven, submitFeedback, activeAssetId],
+  );
 
   const removePin = (i: number) => setPins((p) => p.filter((_, k) => k !== i));
   const addPin = (kind: Pin["kind"], label: string) => {
@@ -675,24 +750,81 @@ function AskPage() {
     setContextOpen(false);
   };
 
-  const renderedThread = useMemo(() => {
+  const unifiedThread = useMemo(() => {
     const list: {
       role: "user" | "assistant"; content?: string; diagnosis?: string;
       evidence?: { text: string; src: string }[]; recommended?: string;
-      confidence?: number; critical?: boolean; reasoning?: { t: string; d: string }[];
+      confidence?: number; critical?: boolean; risk_level?: string | null;
+      reasoning?: { t: string; d: string }[];
+      isPending?: boolean; isStreaming?: boolean; isThinking?: boolean;
+      pins?: Pin[];
     }[] = [];
+
+    // Add all database messages
     dbMessages.forEach((m) => {
       if (m.role === "user") {
         list.push({ role: "user", content: m.content });
       } else if (m.sources && m.sources[0]) {
         const src = m.sources[0];
-        list.push({ role: "assistant", diagnosis: src.diagnosis, evidence: src.evidence, recommended: src.recommended, confidence: src.confidence, critical: src.critical, reasoning: src.reasoning });
+        list.push({
+          role: "assistant",
+          diagnosis: src.diagnosis,
+          evidence: src.evidence,
+          recommended: src.recommended,
+          confidence: src.confidence,
+          critical: src.critical,
+          risk_level: src.risk_level,
+          reasoning: src.reasoning,
+        });
       } else {
-        list.push({ role: "assistant", diagnosis: m.content, confidence: 80, evidence: [], recommended: "", reasoning: [] });
+        list.push({
+          role: "assistant",
+          diagnosis: m.content,
+          confidence: 80,
+          evidence: [],
+          recommended: "",
+          reasoning: [],
+        });
       }
     });
+
+    // Add the pending messages if the database hasn't caught up yet
+    if (pendingUserMsg && dbMessages.length <= sentAtLenRef.current) {
+      list.push({
+        role: "user",
+        content: pendingUserMsg,
+        pins: pendingPins,
+        isPending: true,
+      });
+
+      if (streamingResult) {
+        list.push({
+          role: "assistant",
+          diagnosis: streamingResult.diagnosis,
+          evidence: streamingResult.evidence,
+          recommended: streamingResult.recommended,
+          confidence: streamingResult.confidence,
+          critical: streamingResult.critical,
+          risk_level: streamingResult.risk_level,
+          reasoning: streamingResult.reasoning,
+          isPending: true,
+        });
+      } else if (streamingText) {
+        list.push({
+          role: "assistant",
+          content: streamingText,
+          isStreaming: true,
+        });
+      } else {
+        list.push({
+          role: "assistant",
+          isThinking: true,
+        });
+      }
+    }
+
     return list;
-  }, [dbMessages]);
+  }, [dbMessages, pendingUserMsg, pendingPins, streamingResult, streamingText]);
 
   const isProcessing = !!pendingUserMsg;
   const hasActiveContext = pins.length > 0 || !!activeAssetId;
@@ -735,51 +867,36 @@ function AskPage() {
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
-            {renderedThread.length === 0 && !pendingUserMsg ? (
+            {unifiedThread.length === 0 ? (
               <EmptyState role={activeRole} onSend={send} />
             ) : (
               <div className="max-w-[720px] mx-auto px-4 py-6 space-y-1">
-                {renderedThread.map((qa, i) => (
+                {unifiedThread.map((qa, i) => (
                   <motion.div key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-                    {qa.role === "user"
-                      ? <UserMsg content={qa.content ?? ""} />
-                      : <AssistantMsg
-                          diagnosis={qa.diagnosis} evidence={qa.evidence} recommended={qa.recommended}
-                          confidence={qa.confidence} critical={qa.critical} reasoning={qa.reasoning}
-                          expanded={expanded[i]}
-                          onToggleExpand={() => setExpanded(prev => ({ ...prev, [i]: !prev[i] }))}
-                          assetTerms={assetTerms}
-                        />
-                    }
+                    {qa.role === "user" ? (
+                      <UserMsg content={qa.content ?? ""} pins={qa.pins} />
+                    ) : qa.isThinking ? (
+                      <ClaudeThinking statusMsg={streamingStatus} />
+                    ) : qa.isStreaming ? (
+                      <FlowingAnswer text={qa.content ?? ""} assetTerms={assetTerms} />
+                    ) : (
+                      <AssistantMsg
+                        diagnosis={qa.diagnosis}
+                        evidence={qa.evidence}
+                        recommended={qa.recommended}
+                        confidence={qa.confidence}
+                        critical={qa.critical}
+                        riskLevel={qa.risk_level}
+                        reasoning={qa.reasoning}
+                        expanded={expanded[i] ?? true}
+                        onToggleExpand={() => setExpanded(prev => ({ ...prev, [i]: !(prev[i] ?? true) }))}
+                        assetTerms={assetTerms}
+                        feedback={feedbackGiven[i]}
+                        onFeedback={(v) => handleFeedback(i, qa, v)}
+                      />
+                    )}
                   </motion.div>
                 ))}
-
-                {/* Pending (in-flight) message — hides the moment the saved thread catches up */}
-                {pendingUserMsg && dbMessages.length <= sentAtLenRef.current && (
-                  <>
-                    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-                      {/* Show user message + any attached context pins */}
-                      <UserMsg content={pendingUserMsg} pins={pendingPins} />
-                    </motion.div>
-
-                    <AnimatePresence mode="wait">
-                      {streamingResult ? (
-                        <motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-                          <AssistantMsg
-                            diagnosis={streamingResult.diagnosis} evidence={streamingResult.evidence}
-                            recommended={streamingResult.recommended} confidence={streamingResult.confidence}
-                            critical={streamingResult.critical} reasoning={streamingResult.reasoning}
-                            assetTerms={assetTerms}
-                          />
-                        </motion.div>
-                      ) : (
-                        <motion.div key="thinking" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                          <ClaudeThinking statusMsg={streamingStatus} />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </>
-                )}
                 <div className="h-2" />
               </div>
             )}
@@ -978,6 +1095,24 @@ function fmtId(text: string): string {
   return (text || "").replace(/\b([A-Za-z][A-Za-z0-9]*)_([A-Za-z0-9]+)\b/g, "$1 $2");
 }
 
+// Split a recommended-action string written as "1. … 2. … 3. …" into discrete
+// steps so they can be rendered as a scannable list. A numbered marker is a
+// digit followed by "." or ")" then whitespace — guarded so decimals like
+// "101.0°C" or "2.5 mm" never match. Falls back to a single step otherwise.
+function parseSteps(text: string): string[] {
+  const t = (text || "").trim();
+  const markers = [...t.matchAll(/(?:^|\s)(\d+)[.)]\s+/g)];
+  if (markers.length < 2) return t ? [t] : [];
+  const steps: string[] = [];
+  for (let i = 0; i < markers.length; i++) {
+    const start = markers[i].index! + markers[i][0].length;
+    const end = i + 1 < markers.length ? markers[i + 1].index! : t.length;
+    const seg = t.slice(start, end).trim();
+    if (seg) steps.push(seg);
+  }
+  return steps;
+}
+
 // Lightweight inline markdown for short LLM strings (evidence / recommended / reasoning),
 // which aren't run through the full <Markdown> renderer. Turns **bold** into real bold so
 // the literal asterisks don't show; plain text passes through untouched.
@@ -1041,15 +1176,51 @@ function highlightResponseText(text: string, assetTerms: string[]) {
   }).join("");
 }
 
+// Live "flowing" answer shown while the diagnosis streams in word-by-word, before
+// the full structured card (evidence / actions / risk) arrives on the result event.
+function FlowingAnswer({ text, assetTerms = [] }: { text: string; assetTerms?: string[] }) {
+  void assetTerms;
+  const paras = text.split(/\n\n+/).map((s) => s.trim()).filter(Boolean);
+  return (
+    <div className="my-4 p-5 rounded-2xl bg-surface-1/40 border border-border/30 shadow-sm">
+      <div className="flex gap-3.5 items-start">
+        <img src="/logo.png" alt="OREON" className="mt-0.5 size-7 shrink-0 object-contain" />
+        <div className="flex-1 min-w-0 prose-oreon">
+          <Markdown components={{
+            p: ({ children }) => <p className="text-[14px] text-foreground/85 leading-relaxed mb-3 last:mb-0">{children}</p>,
+            strong: ({ children }) => <strong className="text-foreground font-semibold">{children}</strong>,
+            ul: ({ children }) => <ul className="list-disc pl-4 space-y-1 text-[13px] text-foreground/80 my-2">{children}</ul>,
+            ol: ({ children }) => <ol className="list-decimal pl-4 space-y-1 text-[13px] text-foreground/80 my-2">{children}</ol>,
+            li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          }}>
+            {fmtId(paras.join("\n\n"))}
+          </Markdown>
+          <span className="inline-block w-[7px] h-4 ml-0.5 rounded-sm bg-violet/70 align-middle animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const RISK_STYLES: Record<string, string> = {
+  critical: "text-red-400 bg-red-500/10 border-red-500/30",
+  high: "text-orange-400 bg-orange-500/10 border-orange-500/30",
+  medium: "text-amber-400 bg-amber-400/10 border-amber-400/30",
+  low: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30",
+};
+
 function AssistantMsg({
   diagnosis, evidence = [], recommended = "", confidence = 0,
-  critical = false, reasoning = [], expanded = false, onToggleExpand,
-  assetTerms = [],
+  critical = false, riskLevel = null, reasoning = [], expanded = true, onToggleExpand,
+  assetTerms = [], feedback, onFeedback,
 }: {
   diagnosis?: string; evidence?: { text: string; src: string }[];
   recommended?: string; confidence?: number; critical?: boolean;
+  riskLevel?: string | null;
   reasoning?: { t: string; d: string }[]; expanded?: boolean; onToggleExpand?: () => void;
   assetTerms?: string[];
+  feedback?: "helpful" | "not_helpful";
+  onFeedback?: (v: "helpful" | "not_helpful") => void;
 }) {
   const paras = (diagnosis || "").split(/\n\n+/).map(s => s.trim()).filter(Boolean);
   const hasDetails = evidence.length > 0 || !!recommended || (reasoning && reasoning.length > 0);
@@ -1058,6 +1229,7 @@ function AssistantMsg({
   const confStyle = confPct >= 80 ? "text-emerald-400 bg-emerald-400/8 border-emerald-400/20"
     : confPct >= 60 ? "text-amber-400 bg-amber-400/8 border-amber-400/20"
     : "text-red-400 bg-red-400/8 border-red-400/20";
+  const risk = riskLevel && RISK_STYLES[riskLevel] ? riskLevel : null;
 
   return (
     <div className="my-4 p-5 rounded-2xl bg-surface-1/40 border border-border/30 shadow-sm hover:shadow-md transition-all duration-200">
@@ -1103,7 +1275,11 @@ function AssistantMsg({
           {hasDetails && (
             <div className="space-y-3.5 pt-2 border-t border-border/10">
               <div className="flex items-center gap-2 flex-wrap">
-                {critical && (
+                {risk ? (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-[10px] uppercase tracking-wide ${RISK_STYLES[risk]}`}>
+                    <span className="size-1.5 rounded-full bg-current" /> {risk} risk
+                  </span>
+                ) : critical && (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/25 font-mono text-[10px] text-red-400">
                     <span className="size-1.5 rounded-full bg-red-400" /> Critical
                   </span>
@@ -1149,14 +1325,40 @@ function AssistantMsg({
                         })}
                       </div>
                     )}
-                    {recommended && (
-                      <div className={`rounded-xl border-l-[3px] px-4 py-3.5 ${critical ? "border-l-red-400 border border-red-500/20 bg-red-500/5" : "border-l-cyan/60 border border-cyan/20 bg-cyan/5"}`}>
-                        <div className={`font-mono text-[9px] uppercase tracking-widest mb-2 font-semibold ${critical ? "text-red-400" : "text-cyan/80"}`}>
-                          {critical ? "⚠  Recommended Action" : "Recommended Action"}
+                    {recommended && (() => {
+                      const steps = parseSteps(fmtId(recommended));
+                      return (
+                        <div className={`rounded-xl overflow-hidden border ${critical ? "border-red-500/25 bg-red-500/[0.04]" : "border-cyan/25 bg-cyan/[0.04]"}`}>
+                          <div className={`flex items-center gap-2 px-4 py-2.5 border-b ${critical ? "border-red-500/15 bg-red-500/[0.06]" : "border-cyan/15 bg-cyan/[0.06]"}`}>
+                            {critical
+                              ? <AlertTriangle className="size-3.5 shrink-0 text-red-400" strokeWidth={2} />
+                              : <ChevronRight className="size-3.5 shrink-0 text-cyan/80" strokeWidth={2} />}
+                            <span className={`font-mono text-[10px] uppercase tracking-widest font-semibold ${critical ? "text-red-400" : "text-cyan/90"}`}>
+                              Recommended Action
+                            </span>
+                            {steps.length > 1 && (
+                              <span className="ml-auto font-mono text-[9px] text-text-muted">{steps.length} steps</span>
+                            )}
+                          </div>
+                          {steps.length > 1 ? (
+                            <ol className="divide-y divide-border/10">
+                              {steps.map((s, k) => (
+                                <li key={k} className="flex gap-3 px-4 py-3">
+                                  <span className={`mt-px shrink-0 flex items-center justify-center size-5 rounded-full font-mono text-[10px] font-semibold ${critical ? "bg-red-500/15 text-red-300 border border-red-500/30" : "bg-cyan/15 text-cyan border border-cyan/30"}`}>
+                                    {k + 1}
+                                  </span>
+                                  <div className="text-[13px] text-foreground/85 leading-relaxed"><InlineMd text={s} /></div>
+                                </li>
+                              ))}
+                            </ol>
+                          ) : (
+                            <div className="px-4 py-3.5 text-[13px] text-foreground/85 leading-relaxed">
+                              <InlineMd text={steps[0] ?? fmtId(recommended)} />
+                            </div>
+                          )}
                         </div>
-                        <div className="text-[13px] text-foreground/85 leading-relaxed"><InlineMd text={fmtId(recommended)} /></div>
-                      </div>
-                    )}
+                      );
+                    })()}
                     {reasoning && reasoning.length > 0 && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {reasoning.map((c) => (
@@ -1170,6 +1372,29 @@ function AssistantMsg({
                   </motion.div>
                 )}
               </AnimatePresence>
+            </div>
+          )}
+
+          {/* Feedback — closes the loop: operator confirms/rejects the answer. */}
+          {onFeedback && paras.length > 0 && (
+            <div className="flex items-center gap-2 pt-1">
+              {feedback ? (
+                <span className="font-mono text-[10px] text-text-muted">
+                  {feedback === "helpful" ? "✓ Thanks — logged as helpful" : "✓ Thanks — we'll use this to improve"}
+                </span>
+              ) : (
+                <>
+                  <span className="font-mono text-[10px] text-text-muted">Was this helpful?</span>
+                  <button onClick={() => onFeedback("helpful")}
+                    className="inline-flex items-center gap-1 font-mono text-[10px] text-text-muted hover:text-emerald-400 transition-colors px-2 py-1 rounded-md hover:bg-surface-2 border border-transparent hover:border-emerald-400/30">
+                    <ThumbsUp className="size-3" /> Yes
+                  </button>
+                  <button onClick={() => onFeedback("not_helpful")}
+                    className="inline-flex items-center gap-1 font-mono text-[10px] text-text-muted hover:text-red-400 transition-colors px-2 py-1 rounded-md hover:bg-surface-2 border border-transparent hover:border-red-400/30">
+                    <ThumbsDown className="size-3" /> No
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

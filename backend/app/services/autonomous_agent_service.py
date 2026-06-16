@@ -169,15 +169,9 @@ class AutonomousAgentService:
             "escalation_created": False,
         }
 
-        # 4. Always log health check
-        health_status = "anomaly signals active" if has_anomaly else "operating normally"
-        self._log_activity(
-            asset.id,
-            ActivityType.health_check,
-            f"{asset.name} — {asset.health_score:.0f}% health · {health_status}",
-            {"health_score": asset.health_score, "snapshot": snapshot},
-            confidence=0.95,
-        )
+        # 4. Health checks are tracked in-memory only (above) and NOT persisted:
+        #    one row per asset per scan would dominate the table while being filtered
+        #    out of every view. Only meaningful, state-changing events are stored.
 
         # 5. If anomaly detected and state changed → full pipeline
         if has_anomaly and state_changed:

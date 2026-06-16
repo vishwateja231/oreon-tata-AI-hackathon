@@ -383,6 +383,7 @@ export interface AskResponse {
   recommended: string;
   confidence: number;
   critical: boolean;
+  risk_level?: "low" | "medium" | "high" | "critical" | null;
   reasoning: ReasoningStep[];
 }
 
@@ -405,8 +406,14 @@ export interface ConversationSummary {
 // ----- Feedback Loop -----
 export interface FeedbackCreate {
   asset_id?: string;
+  asset_type?: string;
   decision_type: string;
   feedback_value: string;
+  investigation_id?: string;
+  predicted_root_cause?: string;
+  corrected_root_cause?: string;
+  predicted_confidence?: number;
+  outcome?: string;
   user_comments?: string;
 }
 

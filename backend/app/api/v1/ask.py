@@ -171,6 +171,168 @@ def _ground_confidence(raw, assets_context: list) -> float:
     return round(c, 1)
 
 
+def _derive_risk_level(assets_context: list, critical: bool, has_grounding: bool) -> str | None:
+    """Deterministic risk classification grounded in real asset state — never invented.
+
+    Returns one of "low" | "medium" | "high" | "critical", or None when the query
+    was refused / not grounded (so the UI shows no risk badge). Uses the highest-risk
+    asset in context; falls back to the model's `critical` flag for plant-wide answers.
+    """
+    if not has_grounding:
+        return None
+    if not assets_context:
+        # Plant-wide or document-only answer — no single asset to grade.
+        return "critical" if critical else "medium"
+
+    worst = max(assets_context, key=lambda a: a.failure_probability)
+    fp = worst.failure_probability
+    health = worst.health_score
+    status = getattr(worst.status, "value", str(worst.status)).lower()
+
+    if critical or status == "critical" or fp >= 0.7 or health < 40:
+        return "critical"
+    if status in ("warning", "degraded") or fp >= 0.4 or health < 60:
+        return "high"
+    if fp >= 0.2 or health < 80:
+        return "medium"
+    return "low"
+
+
+def _build_assets_context_str(assets_context: list, sensor_svc, rul_svc) -> str:
+    """Build the per-asset LLM context from REAL data only — never fabricates.
+
+    When an asset has no live sensor reading, the line states telemetry is
+    unavailable instead of injecting placeholder values, and omits the
+    sensor-conditioned RUL confidence interval. This prevents the model from
+    repeating invented sensor numbers as if they were measured.
+    """
+    out = ""
+    for a in assets_context:
+        readings = sensor_svc.get_by_asset(a.id, limit=1)
+        r = readings[0] if readings else None
+        temp = r.temperature_c if r else None
+        vib = r.vibration_mms if r else None
+        press = r.pressure_bar if r else None
+
+        if temp is not None and vib is not None and press is not None:
+            _, _, rul_lower, rul_upper = rul_svc.predict_rul(a.id, temp, vib, press)
+            sensor_part = (
+                f"Sensor Readings -> Temperature: {temp}°C, Vibration: {vib} mm/s, "
+                f"Pressure: {press} bar. "
+                f"RUL: {a.rul_days} days (80% Confidence Interval: {rul_lower} to {rul_upper} days), "
+            )
+        elif temp is not None or vib is not None or press is not None:
+            parts = []
+            if temp is not None: parts.append(f"Temperature: {temp}°C")
+            if vib is not None: parts.append(f"Vibration: {vib} mm/s")
+            if press is not None: parts.append(f"Pressure: {press} bar")
+            sensor_part = (
+                f"Sensor Readings -> {', '.join(parts)} (partial telemetry). "
+                f"RUL: {a.rul_days} days (stored model estimate), "
+            )
+        else:
+            sensor_part = (
+                "Sensor Readings -> not available (no live telemetry for this asset). "
+                f"RUL: {a.rul_days} days (stored model estimate), "
+            )
+
+        out += (
+            f"Asset: {a.id} ({a.name}), Status: {a.status.value}, Health Score: {a.health_score}%, "
+            f"{sensor_part}"
+            f"Criticality: {a.criticality.value}, Production Line: {a.production_line}\n"
+        )
+    return out
+
+
+def _grounded_asset_fallback(assets_context: list, role: str, db) -> tuple:
+    """Deterministic answer built ONLY from real DB values (LLM-unavailable path).
+
+    Invents no SOP numbers, costs, tonnages, lead times, or sensor values — every
+    figure traces to the asset record or a real service. Returns
+    (diagnosis, recommended, evidence, confidence, critical, reasoning).
+    """
+    ranked = sorted(assets_context, key=lambda a: a.failure_probability, reverse=True)
+    a0 = ranked[0]
+    health = a0.health_score
+    rul = a0.rul_days
+    fail_prob = round(a0.failure_probability * 100, 1)
+    status_val = a0.status.value
+    crit_val = a0.criticality.value
+    prod_line = a0.production_line or "the plant floor"
+    is_critical = status_val.lower() == "critical" or health < 50 or a0.failure_probability >= 0.7
+
+    if is_critical:
+        severity_phrase = "a critical condition"
+    elif status_val.lower() in ("warning", "degraded") or health < 70:
+        severity_phrase = "a degraded state"
+    else:
+        severity_phrase = "a stable condition"
+    urgency_phrase = (
+        "Immediate intervention is recommended to prevent unplanned downtime."
+        if is_critical else
+        "Plan preventive maintenance within the current window."
+    )
+
+    base = (
+        f"{a0.name} on {prod_line} is in {severity_phrase}: health score {health}%, "
+        f"{fail_prob}% failure probability, {rul} days estimated remaining useful life, "
+        f"criticality {crit_val.upper()}. {urgency_phrase}"
+    )
+
+    role_note = {
+        "operator": " As the operator: perform a physical check of the unit and apply Lock-Out/Tag-Out (LOTO) before any inspection; escalate abnormal readings to your shift supervisor.",
+        "maintenance_engineer": " As maintenance engineer: confirm the root cause against live sensor alarms and the applicable equipment SOP before intervening.",
+        "reliability_engineer": f" As reliability engineer: remaining useful life is {rul} days at {fail_prob}% failure probability — track the degradation trend in the Investigation view.",
+        "procurement_officer": f" As procurement officer: verify spare availability and lead time against the {rul}-day RUL window in Procurement.",
+        "supervisor": " As supervisor: dispatch a team and acknowledge any open escalation for this asset in the Alert Center.",
+    }.get(role, "")
+
+    # Plant manager: use REAL business-risk figures or state unavailable — no hardcoded ₹.
+    if role == "plant_manager":
+        match = None
+        try:
+            from app.services.decision_service import DecisionService
+            risks = DecisionService(db).business_risks(limit=10)
+            match = next((r for r in risks if r.asset_id == a0.id), None) or (risks[0] if risks else None)
+        except Exception:
+            match = None
+        if match and (getattr(match, "revenue_exposure_inr", None) or getattr(match, "cost_of_inaction_inr", None)):
+            parts = []
+            if match.revenue_exposure_inr:
+                parts.append(f"revenue exposure ₹{match.revenue_exposure_inr / 1_00_00_000:.2f} Cr")
+            if match.cost_of_inaction_inr:
+                parts.append(f"cost of inaction ₹{match.cost_of_inaction_inr / 1_00_000:.1f} L")
+            role_note = " As plant manager: " + ", ".join(parts) + " (OREON business-impact engine)."
+        else:
+            role_note = " As plant manager: quantified financial exposure is not available for this asset in the current data."
+
+    diagnosis = base + role_note
+    recommended = (
+        f"Open an investigation for {a0.name} and act per the applicable SOP for this equipment type. "
+        + ("Treat as urgent given the critical status." if is_critical
+           else "Schedule within the preventive-maintenance window.")
+    )
+    evidence = [
+        {
+            "text": (
+                f"{a.name} · {a.health_score}% health · "
+                f"{round(a.failure_probability * 100)}% failure probability · "
+                f"{a.rul_days}d remaining life · status {a.status.value}"
+            ),
+            "src": "OREON Asset Database",
+        }
+        for a in ranked[:3]
+    ]
+    confidence = round(min(80.0, fail_prob), 1)
+    reasoning = [
+        {"t": "Asset State", "d": f"Health {health}%, failure probability {fail_prob}%, status {status_val}."},
+        {"t": "RUL Estimate", "d": f"Remaining useful life: {rul} days (OREON RandomForest model)."},
+        {"t": "Criticality", "d": f"Asset on {prod_line}, criticality: {crit_val}."},
+        {"t": "Source", "d": "Built deterministically from live OREON records (AI narration layer not used for this reply)."},
+    ]
+    return diagnosis, recommended, evidence, confidence, is_critical, reasoning
+
+
 def _get_ask_cache_key(role: str, query: str, conversation_id: str | None) -> str:
     """Helper to generate a unique key for the ask endpoint.
     Includes conversation_id (prevents cross-conversation collisions) and the
@@ -193,8 +355,12 @@ def run_ask_logic(
     payload: AskRequest,
     db: Session,
     status_callback=None
-) -> tuple[str, str, list, float, bool, list, str]:
-    """Runs the core RAG + LLM execution logic, reporting status through status_callback."""
+) -> tuple[str, str, list, float, bool, list, bool, str | None]:
+    """Runs the core RAG + LLM execution logic, reporting status through status_callback.
+
+    Returns: (conv_id, diagnosis, evidence, recommended, confidence, critical,
+              reasoning, llm_used, risk_level).
+    """
     settings = get_settings()
     role_raw = (payload.role or "maintenance_engineer").lower().strip()
     role = role_raw if role_raw in VALID_ROLES else "maintenance_engineer"
@@ -222,7 +388,7 @@ def run_ask_logic(
         )
         return conv_id, greeting_resp, [], "Ask me about any asset, incident, or maintenance topic.", 95.0, False, [
             {"t": "OREON Identity", "d": "Deterministic AI platform — not an LLM chatbot. Answers are grounded in live plant data."}
-        ], False
+        ], False, None
 
     # Retrieve Context from Database
     pinned_assets = [p.label for p in payload.pins if p.kind == "asset"]
@@ -230,7 +396,6 @@ def run_ask_logic(
         pinned_assets.append(payload.context_asset_id)
 
     all_assets = all_assets_early
-    q_lower = payload.query.lower()
     mentioned_assets = []
 
     if not pinned_assets:
@@ -270,23 +435,7 @@ def run_ask_logic(
     sensor_svc = SensorService(db)
     rul_svc = RulModelService(db)
 
-    assets_context_str = ""
-    for a in assets_context:
-        readings = sensor_svc.get_by_asset(a.id, limit=1)
-        temp = readings[0].temperature_c if readings else 75.0
-        vib = readings[0].vibration_mms if readings else 2.5
-        press = readings[0].pressure_bar if readings else 4.0
-        if temp is None: temp = 75.0
-        if vib is None: vib = 2.5
-        if press is None: press = 4.0
-        
-        _, _, rul_lower, rul_upper = rul_svc.predict_rul(a.id, temp, vib, press)
-        assets_context_str += (
-            f"Asset: {a.id} ({a.name}), Status: {a.status.value}, Health Score: {a.health_score}%, "
-            f"Sensor Readings -> Temperature: {temp}°C, Vibration: {vib} mm/s, Pressure: {press} bar. "
-            f"RUL: {a.rul_days} days (80% Confidence Interval: {rul_lower} to {rul_upper} days), "
-            f"Criticality: {a.criticality.value}, Production Line: {a.production_line}\n"
-        )
+    assets_context_str = _build_assets_context_str(assets_context, sensor_svc, rul_svc)
 
     # Perform ChromaDB RAG
     retrieval_query = payload.query
@@ -328,11 +477,11 @@ def run_ask_logic(
         if readings:
             r = readings[0]
             snap = SensorSnapshot(
-                temperature_c=r.temperature_c or 75.0,
-                vibration_mms=r.vibration_mms or 2.5,
-                pressure_bar=r.pressure_bar or 4.0,
-                current_amps=r.current_amps or 48.0,
-                rpm=r.rpm or 1480.0,
+                temperature_c=r.temperature_c,
+                vibration_mms=r.vibration_mms,
+                pressure_bar=r.pressure_bar,
+                current_amps=r.current_amps,
+                rpm=r.rpm,
                 noise_db=r.noise_db,
             )
             try:
@@ -554,147 +703,19 @@ def run_ask_logic(
 
             _llm_used = True   # real LLM response obtained successfully
         except Exception as exc:
-            # No silent fallback: a failing AI layer must be visible, not papered over.
-            logger.error("Ask OREON LLM failure: %s", exc)
-            raise HTTPException(
-                status_code=503,
-                detail="OREON is momentarily busy. Please retry in a few seconds.",
-            ) from exc
+            # Graceful degradation: when the AI narration layer is unavailable, do NOT
+            # error out and do NOT fabricate — fall through to the deterministic,
+            # fully-grounded fallback built from live OREON records (handled below).
+            logger.error("Ask OREON LLM failure: %s — using grounded deterministic fallback", exc)
+            _llm_used = False
 
-    # No-fallback policy: a grounded query must always be answered by the live model.
-    # Allow fallback during unit tests (pytest) so that test assertions can run reproducible checks.
-    import sys
-    if has_grounding and not settings.OPENROUTER_API_KEY and not settings.GROQ_API_KEY and "pytest" not in sys.modules:
-        raise HTTPException(status_code=503, detail="AI is not configured (OPENROUTER_API_KEY/GROQ_API_KEY missing).")
-
-    # ── (dead path retained for reference; unreachable under no-fallback policy) ──
+    # ── Deterministic grounded fallback (LLM unavailable / not configured / failed) ──
+    # Always answers from real plant data — never fabricates and never hard-fails.
     if has_grounding and not _llm_used:
         if assets_context:
-            # Sort by failure probability so the most at-risk asset leads
-            ranked = sorted(assets_context, key=lambda a: a.failure_probability, reverse=True)
-            a0 = ranked[0]
-            health = a0.health_score
-            rul = a0.rul_days
-            fail_prob = round(a0.failure_probability * 100, 1)
-            status_val = a0.status.value
-            crit_val = a0.criticality.value
-            prod_line = a0.production_line or "plant floor"
-            is_critical = health < 50 or a0.failure_probability >= 0.7
-            fail_prob_int = round(a0.failure_probability * 100)
-
-            # Query-intent lead sentence — uses human name, not raw ID
-            q_lower = payload.query.lower()
-            if any(w in q_lower for w in ("why", "cause", "reason", "what is wrong")):
-                lead = f"The root cause concern for {a0.name} stems from accelerated degradation detected by OREON sensors."
-            elif any(w in q_lower for w in ("how", "fix", "repair", "resolve", "action")):
-                lead = f"Here is the recommended corrective action for {a0.name}."
-            elif any(w in q_lower for w in ("when", "schedule", "plan", "next")):
-                lead = f"Scheduling context for {a0.name} based on its current remaining useful life estimate."
-            elif any(w in q_lower for w in ("risk", "impact", "cost", "downtime")):
-                lead = f"Risk assessment for {a0.name} on production line {prod_line}."
-            elif any(w in q_lower for w in ("compare", "vs", "versus", "difference")):
-                lead = f"Comparative status for assets in scope, starting with {a0.name} as the highest-risk unit."
-            else:
-                lead = f"Current status for {a0.name} on production line {prod_line}."
-
-            severity_phrase = "critical condition" if is_critical else "degraded state"
-            urgency_phrase = (
-                "Immediate intervention is required to prevent unplanned downtime."
-                if is_critical else
-                "Schedule preventive maintenance within the current planning window."
+            diagnosis, recommended, evidence, confidence, critical, reasoning = (
+                _grounded_asset_fallback(assets_context, role, db)
             )
-
-            # Retrieve business risks for Plant Manager if possible
-            total_exp = 42000000.0
-            downtime_cost = 350000.0
-            try:
-                from app.services.decision_service import DecisionService
-                decision_svc = DecisionService(db)
-                business_risks = decision_svc.business_risks(limit=10)
-                if business_risks:
-                    matching_risk = next((r for r in business_risks if r.asset_id == a0.id), None)
-                    if not matching_risk:
-                        matching_risk = business_risks[0]
-                    total_exp = matching_risk.revenue_exposure_inr or total_exp
-                    downtime_cost = matching_risk.cost_of_inaction_inr or downtime_cost
-            except Exception:
-                pass
-
-            if role == "operator":
-                diagnosis = (
-                    f"Immediate Action: Inspect lubrication system on {a0.name} ({a0.id}). Check housing temperature at the local gauge.\n\n"
-                    f"Safety Warning: Lock-Out/Tag-Out (LOTO) is mandatory before visual inspection. Wear Class 3 heat-resistant gloves.\n\n"
-                    f"Escalation Path: Report any abnormal vibrations or thermal readings to your Shift Supervisor immediately."
-                )
-            elif role == "maintenance_engineer":
-                diagnosis = (
-                    f"Root Cause: Bearing degradation and misalignment on {a0.name} ({a0.id}).\n\n"
-                    f"Evidence: Mechanical vibrations have exceeded 9.2 mm/s threshold. Health OEE index is currently {health}%.\n\n"
-                    f"SOP Reference: Follow SOP-MO-042 (Dynamic Shaft Alignment Protocol) and prepare standard engineering tools."
-                )
-            elif role == "reliability_engineer":
-                diagnosis = (
-                    f"Remaining Useful Life (RUL): Predicted at {rul} days (80% Confidence Interval: {max(1, rul - 3)} to {rul + 3} days).\n\n"
-                    f"Trend Analysis: Accelerated deterioration curve observed. Vibration drift shows a steady +0.35 mm/s² increase.\n\n"
-                    f"Failure Probability: Failure probability index has risen to {fail_prob}%."
-                )
-            elif role == "procurement_officer":
-                diagnosis = (
-                    f"Spare Requirements: Requires block bearings and replacement seals compatible with {a0.name} ({a0.id}).\n\n"
-                    f"Lead Times: Supplier lead time is 14 days.\n\n"
-                    f"Inventory Risks: Capital committed spares are below the reorder threshold. Vulnerability gap: {max(0, 14 - rul)} days."
-                )
-            elif role == "supervisor":
-                diagnosis = (
-                    f"Team Workload: Assign Mechanical Team 3 to investigate {a0.name} ({a0.id}).\n\n"
-                    f"Escalation State: Active escalation SLA timer is running. Response window has 24 minutes left before breach.\n\n"
-                    f"Approval Queue: Acknowledge alert and sign off on repair dispatch in the Supervisor Dashboard."
-                )
-            elif role == "plant_manager":
-                diagnosis = (
-                    f"Downtime Impact: High exposure on production line {prod_line} due to potential {a0.name} failure.\n\n"
-                    f"Production Loss: Outage results in a loss of 55-110 tonnes per hour.\n\n"
-                    f"Cost Exposure: Total revenue exposure is ₹{(total_exp / 1_00_00_000):.2f} Cr. Cost of inaction estimated at ₹{(downtime_cost / 1_00_000):.1f}L per hour."
-                )
-            else:
-                diagnosis = (
-                    f"{lead}\n\n"
-                    f"{a0.name} is in {severity_phrase} with a health score of {health}%, "
-                    f"{fail_prob_int}% failure probability, and {rul} days of remaining useful life. "
-                    f"Criticality is rated {crit_val.upper()}.\n\n"
-                    f"{urgency_phrase}"
-                )
-
-            # Role-specific recommended action (uses real data, not a template)
-            role_actions = {
-                "plant_manager": f"Authorize maintenance for {a0.id} on {prod_line}. Unplanned failure halts downstream assets.",
-                "maintenance_engineer": f"Inspect {a0.id} per SOP. Check sensor alarms, lubrication, and coupling alignment.",
-                "reliability_engineer": f"Open Investigation for {a0.id} to get RUL confidence intervals and degradation curve.",
-                "procurement_officer": f"Verify spare availability for {a0.id} parts against {rul}-day RUL window.",
-                "supervisor": f"Dispatch team to {a0.id}. Acknowledge any open escalations in the Alert Center.",
-                "operator": f"Go to {a0.id} — check temperature gauge, vibration, and oil level. Call supervisor if abnormal.",
-            }
-            recommended = role_actions.get(role, f"Check {a0.id} status and follow applicable SOP.")
-
-            evidence = [
-                {
-                    "text": (
-                        f"{a.name} · {a.health_score}% health · "
-                        f"{round(a.failure_probability * 100)}% failure probability · "
-                        f"{a.rul_days}d remaining life · status {a.status.value}"
-                    ),
-                    "src": "OREON Asset Database",
-                }
-                for a in ranked[:3]
-            ]
-            confidence = round(min(80.0, fail_prob_int), 1)
-            critical = is_critical
-            reasoning = [
-                {"t": "Asset State", "d": f"Health {health}%, failure probability {fail_prob}%, status {status_val}."},
-                {"t": "RUL Estimate", "d": f"Remaining useful life: {rul} days (OREON RandomForest model)."},
-                {"t": "Criticality", "d": f"Asset on {prod_line}, criticality: {crit_val}."},
-                {"t": "AI Unavailable", "d": "OpenRouter LLM not reachable — response built from live OREON database. Retry for full AI analysis."},
-            ]
         else:
             # Grounding came from RAG only (no specific asset in context)
             rag_topics = [c.source_document for c in procedural_kb[:2]] if procedural_kb else []
@@ -723,6 +744,9 @@ def run_ask_logic(
         else:
             reasoning = [{"t": "No Grounding", "d": "Query could not be matched to any known asset, SOP, or incident."}]
 
+    # Explicit, grounded risk classification (problem-statement 5.2).
+    risk_level = _derive_risk_level(assets_context, critical, has_grounding)
+
     # Present assets by friendly name in all prose — never raw IDs like "Motor_M12".
     from app.utils.asset_naming import humanize_asset_refs, humanize_in_obj
     id_to_name = {a.id: a.name for a in all_assets}
@@ -731,7 +755,7 @@ def run_ask_logic(
     reasoning = humanize_in_obj(reasoning, id_to_name)
     evidence = humanize_in_obj(evidence, id_to_name)
 
-    return conv_id, diagnosis, evidence, recommended, confidence, critical, reasoning, _llm_used
+    return conv_id, diagnosis, evidence, recommended, confidence, critical, reasoning, _llm_used, risk_level
 
 
 @router.post("", response_model=AskResponse)
@@ -856,6 +880,7 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                         "recommended": "Ask me about any asset, incident, or maintenance topic.",
                         "confidence": 95.0,
                         "critical": False,
+                        "risk_level": None,
                         "reasoning": [
                             {"t": "OREON Identity", "d": "Deterministic AI platform — not an LLM chatbot. Answers are grounded in live plant data."}
                         ]
@@ -921,23 +946,7 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                 sensor_svc = SensorService(db)
                 rul_svc = RulModelService(db)
 
-                assets_context_str = ""
-                for a in assets_context:
-                    readings = sensor_svc.get_by_asset(a.id, limit=1)
-                    temp = readings[0].temperature_c if readings else 75.0
-                    vib = readings[0].vibration_mms if readings else 2.5
-                    press = readings[0].pressure_bar if readings else 4.0
-                    if temp is None: temp = 75.0
-                    if vib is None: vib = 2.5
-                    if press is None: press = 4.0
-                    
-                    _, _, rul_lower, rul_upper = rul_svc.predict_rul(a.id, temp, vib, press)
-                    assets_context_str += (
-                        f"Asset: {a.id} ({a.name}), Status: {a.status.value}, Health Score: {a.health_score}%, "
-                        f"Sensor Readings -> Temperature: {temp}°C, Vibration: {vib} mm/s, Pressure: {press} bar. "
-                        f"RUL: {a.rul_days} days (80% Confidence Interval: {rul_lower} to {rul_upper} days), "
-                        f"Criticality: {a.criticality.value}, Production Line: {a.production_line}\n"
-                    )
+                assets_context_str = _build_assets_context_str(assets_context, sensor_svc, rul_svc)
 
                 # ChromaDB RAG
                 retrieval_query = payload.query
@@ -981,11 +990,11 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                         r = readings[0]
                         from app.schemas.investigation import SensorSnapshot as _SensorSnapshot
                         snap = _SensorSnapshot(
-                            temperature_c=r.temperature_c or 75.0,
-                            vibration_mms=r.vibration_mms or 2.5,
-                            pressure_bar=r.pressure_bar or 4.0,
-                            current_amps=r.current_amps or 48.0,
-                            rpm=r.rpm or 1480.0,
+                            temperature_c=r.temperature_c,
+                            vibration_mms=r.vibration_mms,
+                            pressure_bar=r.pressure_bar,
+                            current_amps=r.current_amps,
+                            rpm=r.rpm,
                             noise_db=r.noise_db,
                         )
                         try:
@@ -1213,130 +1222,12 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
 
 
                 if not stream_success:
-                    # Deterministic fallback logic
+                    # Deterministic grounded fallback (LLM stream unavailable/unparseable).
                     if has_grounding:
                         if assets_context:
-                            ranked = sorted(assets_context, key=lambda a: a.failure_probability, reverse=True)
-                            a0 = ranked[0]
-                            health = a0.health_score
-                            rul = a0.rul_days
-                            fail_prob = round(a0.failure_probability * 100, 1)
-                            status_val = a0.status.value
-                            crit_val = a0.criticality.value
-                            prod_line = a0.production_line or "plant floor"
-                            is_critical = health < 50 or a0.failure_probability >= 0.7
-                            fail_prob_int = round(a0.failure_probability * 100)
-
-                            q_lower = payload.query.lower()
-                            if any(w in q_lower for w in ("why", "cause", "reason", "what is wrong")):
-                                lead = f"The root cause concern for {a0.name} stems from accelerated degradation detected by OREON sensors."
-                            elif any(w in q_lower for w in ("how", "fix", "repair", "resolve", "action")):
-                                lead = f"Here is the recommended corrective action for {a0.name}."
-                            elif any(w in q_lower for w in ("when", "schedule", "plan", "next")):
-                                lead = f"Scheduling context for {a0.name} based on its current remaining useful life estimate."
-                            elif any(w in q_lower for w in ("risk", "impact", "cost", "downtime")):
-                                lead = f"Risk assessment for {a0.name} on production line {prod_line}."
-                            elif any(w in q_lower for w in ("compare", "vs", "versus", "difference")):
-                                lead = f"Comparative status for assets in scope, starting with {a0.name} as the highest-risk unit."
-                            else:
-                                lead = f"Current status for {a0.name} on production line {prod_line}."
-
-                            severity_phrase = "critical condition" if is_critical else "degraded state"
-                            urgency_phrase = (
-                                "Immediate intervention is required to prevent unplanned downtime."
-                                if is_critical else
-                                "Schedule preventive maintenance within the current planning window."
+                            diagnosis, recommended, evidence, confidence, critical, reasoning = (
+                                _grounded_asset_fallback(assets_context, role, db)
                             )
-
-                            total_exp = 42000000.0
-                            downtime_cost = 350000.0
-                            try:
-                                from app.services.decision_service import DecisionService
-                                decision_svc = DecisionService(db)
-                                business_risks = decision_svc.business_risks(limit=10)
-                                if business_risks:
-                                    matching_risk = next((r for r in business_risks if r.asset_id == a0.id), None)
-                                    if not matching_risk:
-                                        matching_risk = business_risks[0]
-                                    total_exp = matching_risk.revenue_exposure_inr or total_exp
-                                    downtime_cost = matching_risk.cost_of_inaction_inr or downtime_cost
-                            except Exception:
-                                pass
-
-                            if role == "operator":
-                                diagnosis = (
-                                    f"Immediate Action: Inspect lubrication system on {a0.name} ({a0.id}). Check housing temperature at the local gauge.\n\n"
-                                    f"Safety Warning: Lock-Out/Tag-Out (LOTO) is mandatory before visual inspection. Wear Class 3 heat-resistant gloves.\n\n"
-                                    f"Escalation Path: Report any abnormal vibrations or thermal readings to your Shift Supervisor immediately."
-                                )
-                            elif role == "maintenance_engineer":
-                                diagnosis = (
-                                    f"Root Cause: Bearing degradation and misalignment on {a0.name} ({a0.id}).\n\n"
-                                    f"Evidence: Mechanical vibrations have exceeded 9.2 mm/s threshold. Health OEE index is currently {health}%.\n\n"
-                                    f"SOP Reference: Follow SOP-MO-042 (Dynamic Shaft Alignment Protocol) and prepare standard engineering tools."
-                                )
-                            elif role == "reliability_engineer":
-                                diagnosis = (
-                                    f"Remaining Useful Life (RUL): Predicted at {rul} days (80% Confidence Interval: {max(1, rul - 3)} to {rul + 3} days).\n\n"
-                                    f"Trend Analysis: Accelerated deterioration curve observed. Vibration drift shows a steady +0.35 mm/s² increase.\n\n"
-                                    f"Failure Probability: Failure probability index has risen to {fail_prob}%."
-                                )
-                            elif role == "procurement_officer":
-                                diagnosis = (
-                                    f"Spare Requirements: Requires block bearings and replacement seals compatible with {a0.name} ({a0.id}).\n\n"
-                                    f"Lead Times: Supplier lead time is 14 days.\n\n"
-                                    f"Inventory Risks: Capital committed spares are below the reorder threshold. Vulnerability gap: {max(0, 14 - rul)} days."
-                                )
-                            elif role == "supervisor":
-                                diagnosis = (
-                                    f"Team Workload: Assign Mechanical Team 3 to investigate {a0.name} ({a0.id}).\n\n"
-                                    f"Escalation State: Active escalation SLA timer is running. Response window has 24 minutes left before breach.\n\n"
-                                    f"Approval Queue: Acknowledge alert and sign off on repair dispatch in the Supervisor Dashboard."
-                                )
-                            elif role == "plant_manager":
-                                diagnosis = (
-                                    f"Downtime Impact: High exposure on production line {prod_line} due to potential {a0.name} failure.\n\n"
-                                    f"Production Loss: Outage results in a loss of 55-110 tonnes per hour.\n\n"
-                                    f"Cost Exposure: Total revenue exposure is ₹{(total_exp / 1_00_00_000):.2f} Cr. Cost of inaction estimated at ₹{(downtime_cost / 1_00_000):.1f}L per hour."
-                                )
-                            else:
-                                diagnosis = (
-                                    f"{lead}\n\n"
-                                    f"{a0.name} is in {severity_phrase} with a health score of {health}%, "
-                                    f"{fail_prob_int}% failure probability, and {rul} days of remaining useful life. "
-                                    f"Criticality is rated {crit_val.upper()}.\n\n"
-                                    f"{urgency_phrase}"
-                                )
-
-                            role_actions = {
-                                "plant_manager": f"Authorize maintenance for {a0.id} on {prod_line}. Unplanned failure halts downstream assets.",
-                                "maintenance_engineer": f"Inspect {a0.id} per SOP. Check sensor alarms, lubrication, and coupling alignment.",
-                                "reliability_engineer": f"Open Investigation for {a0.id} to get RUL confidence intervals and degradation curve.",
-                                "procurement_officer": f"Verify spare availability for {a0.id} parts against {rul}-day RUL window.",
-                                "supervisor": f"Dispatch team to {a0.id}. Acknowledge any open escalations in the Alert Center.",
-                                "operator": f"Go to {a0.id} — check temperature gauge, vibration, and oil level. Call supervisor if abnormal.",
-                            }
-                            recommended = role_actions.get(role, f"Check {a0.id} status and follow applicable SOP.")
-
-                            evidence = [
-                                {
-                                    "text": (
-                                        f"{a.name} · {a.health_score}% health · "
-                                        f"{round(a.failure_probability * 100)}% failure probability · "
-                                        f"{a.rul_days}d remaining life · status {a.status.value}"
-                                    ),
-                                    "src": "OREON Asset Database",
-                                }
-                                for a in ranked[:3]
-                            ]
-                            confidence = round(min(80.0, fail_prob_int), 1)
-                            critical = is_critical
-                            reasoning = [
-                                {"t": "Asset State", "d": f"Health {health}%, failure probability {fail_prob}%, status {status_val}."},
-                                {"t": "RUL Estimate", "d": f"Remaining useful life: {rul} days (OREON RandomForest model)."},
-                                {"t": "Criticality", "d": f"Asset on {prod_line}, criticality: {crit_val}."},
-                                {"t": "AI Stream Error", "d": "Could not parse AI stream output. Fallback to live database-driven analysis."}
-                            ]
                         else:
                             rag_topics = [c.source_document for c in procedural_kb[:2]] if procedural_kb else []
                             diagnosis = (
@@ -1363,11 +1254,6 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                         else:
                             reasoning = [{"t": "No Grounding", "d": "Query could not be matched to any known asset, SOP, or incident."}]
 
-                    # Stream diagnosis word-by-word for fallback path
-                    for word in diagnosis.split(" "):
-                        yield f"data: {json.dumps({'type': 'token', 'text': word + ' '})}\n\n"
-                        time.sleep(0.02)
-
                 # Post-process all text and yield result
                 from app.utils.asset_naming import humanize_asset_refs, humanize_in_obj
                 id_to_name = {a.id: a.name for a in all_assets}
@@ -1376,6 +1262,17 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                 reasoning = humanize_in_obj(reasoning, id_to_name)
                 evidence = humanize_in_obj(evidence, id_to_name)
 
+                # Stream the (humanized) diagnosis word-by-word so the answer flows in
+                # like a chat assistant rather than appearing as one block. Applies to
+                # both the LLM and the deterministic-fallback diagnosis.
+                if diagnosis:
+                    for word in diagnosis.split(" "):
+                        yield f"data: {json.dumps({'type': 'token', 'text': word + ' '})}\n\n"
+                        time.sleep(0.012)
+
+                # Explicit, grounded risk classification (problem-statement 5.2).
+                risk_level = _derive_risk_level(assets_context, critical, has_grounding)
+
                 final_data = {
                     "conversation_id": conv_id,
                     "diagnosis": diagnosis,
@@ -1383,6 +1280,7 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                     "recommended": recommended,
                     "confidence": confidence,
                     "critical": critical,
+                    "risk_level": risk_level,
                     "reasoning": reasoning
                 }
 
@@ -1402,7 +1300,7 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
                 assistant_msg = ConversationMessage(
                     conversation_id=conv_id, role="assistant",
                     content=assistant_content,
-                    sources=json.dumps({"evidence": evidence, "reasoning": reasoning, "diagnosis": diagnosis, "recommended": recommended, "confidence": confidence, "critical": critical})
+                    sources=json.dumps({"evidence": evidence, "reasoning": reasoning, "diagnosis": diagnosis, "recommended": recommended, "confidence": confidence, "critical": critical, "risk_level": risk_level})
                 )
                 db.add(user_msg)
                 db.add(assistant_msg)
@@ -1418,7 +1316,7 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
 
     else:
         # Non-streaming request
-        conv_id, diagnosis, evidence, recommended, confidence, critical, reasoning, llm_used = run_ask_logic(
+        conv_id, diagnosis, evidence, recommended, confidence, critical, reasoning, llm_used, risk_level = run_ask_logic(
             payload, db
         )
 
@@ -1429,6 +1327,7 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
             "recommended": recommended,
             "confidence": confidence,
             "critical": critical,
+            "risk_level": risk_level,
             "reasoning": reasoning
         }
 
@@ -1454,7 +1353,7 @@ def ask_oreon(payload: AskRequest, db: Session = Depends(get_db)):
             conversation_id=conv_id,
             role="assistant",
             content=assistant_content,
-            sources=json.dumps({"evidence": evidence, "reasoning": reasoning, "diagnosis": diagnosis, "recommended": recommended, "confidence": confidence, "critical": critical})
+            sources=json.dumps({"evidence": evidence, "reasoning": reasoning, "diagnosis": diagnosis, "recommended": recommended, "confidence": confidence, "critical": critical, "risk_level": risk_level})
         )
         db.add(user_msg)
         db.add(assistant_msg)

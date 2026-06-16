@@ -36,6 +36,9 @@ class AskResponse(BaseModel):
     recommended: str
     confidence: float
     critical: bool = False
+    # Explicit risk classification per the problem statement (5.2):
+    # one of "low" | "medium" | "high" | "critical"; None for refusals/greetings.
+    risk_level: Optional[str] = None
     reasoning: list[ReasoningStep] = Field(default_factory=list)
 
 
