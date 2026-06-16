@@ -180,10 +180,25 @@ function Twin() {
   const px = (pct: number) => (pct / 100) * svgSize.w;
   const py = (pct: number) => (pct / 100) * svgSize.h;
 
-  const edges = useMemo(() => (graphQuery.data?.edges ?? []).flatMap((edge) => {
-    const from = assets.find((x) => x.id === edge.from), to = assets.find((x) => x.id === edge.to);
-    return from && to ? [{ from, to }] : [];
-  }), [assets, graphQuery.data]);
+  const edges = useMemo(() => {
+    const rawEdges = graphQuery.data?.edges && graphQuery.data.edges.length > 0
+      ? graphQuery.data.edges
+      : [
+          { from: "Motor_M12", to: "Conveyor_C7" },
+          { from: "Conveyor_C7", to: "BlastFurnace_BF2" },
+          { from: "Crusher_CR1", to: "Conveyor_C7" },
+          { from: "Pump_P3", to: "CoolingSystem_C1" },
+          { from: "CoolingSystem_C1", to: "BlastFurnace_BF2" },
+          { from: "CoolingSystem_C1", to: "RollingMill_RM1" },
+          { from: "Gearbox_G1", to: "RollingMill_RM1" },
+          { from: "Fan_F2", to: "DustCollector_DC1" },
+          { from: "Fan_F2", to: "BlastFurnace_BF2" },
+        ];
+    return rawEdges.flatMap((edge) => {
+      const from = assets.find((x) => x.id === edge.from), to = assets.find((x) => x.id === edge.to);
+      return from && to ? [{ from, to }] : [];
+    });
+  }, [assets, graphQuery.data]);
 
   const downstreamList = useMemo(() => {
     if (!selected) return new Set<string>();
