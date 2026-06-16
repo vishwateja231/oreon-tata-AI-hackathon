@@ -18,7 +18,11 @@ export const useOREONContext = create<OREONContextState>((set) => ({
   activeAssetId: null,
   currentPage: "Command Center",
   recentActivity: [],
-  sidebarCollapsed: typeof window !== "undefined" ? localStorage.getItem("oreon-sidebar-collapsed") === "true" : false,
+  // Deterministic default so server-rendered and first client-rendered markup match.
+  // The persisted preference is restored after mount (see Shell) to avoid a hydration
+  // mismatch — reading localStorage here would make the client's first render differ
+  // from the server's, which React flags as a hydration error.
+  sidebarCollapsed: false,
   setActiveAssetId: (id) => set({ activeAssetId: id }),
   setCurrentPage: (page) => set({ currentPage: page }),
   pushActivity: (label) =>

@@ -135,7 +135,7 @@ function PlantStrip() {
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--hairline)] pb-6">
           <div>
             <div className="eyebrow">The monitored plant</div>
-            <h3 className="mt-3 h-display text-[28px] sm:text-[36px]">Ten assets. One dependency chain. Zero blind spots.</h3>
+            <h3 className="mt-3 h-display text-[28px] sm:text-[36px]">Many assets. One dependency chain. Zero blind spots.</h3>
           </div>
           <div className="flex items-center gap-5 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-dim)]">
             <span className="flex items-center gap-1.5"><span className="size-1.5 rounded-full" style={{ background: STATUS_HEX.ok }} /> Healthy</span>

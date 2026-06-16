@@ -54,19 +54,17 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         _log.warning("Schema back-fill skipped: %s", exc)
 
-    # Auto-seed on first run (idempotent — skipped if data already exists)
+    # Seed on first run AND refresh asset vitals on every boot. load_all() is
+    # idempotent: it full-seeds an empty DB, otherwise it only re-applies the
+    # health/risk/RUL/status spread from assets.json. This is required because the
+    # live sensor sim drifts health down and persists it — without a boot refresh an
+    # already-seeded plant would ratchet toward failure and never recover the spread.
     try:
-        from sqlalchemy.orm import Session
-        from sqlalchemy import select, func
-        from app.models.asset import Asset as _Asset
         from app.utils.data_loader import load_all
-        with Session(engine) as _db:
-            count = _db.scalar(select(func.count()).select_from(_Asset)) or 0
-        if count == 0:
-            load_all()
-            _log.info("Database seeded with initial plant data")
+        load_all()
+        _log.info("Database seeded / asset vitals refreshed from seed data")
     except Exception as exc:
-        _log.warning("Auto-seed failed (may already be seeded): %s", exc)
+        _log.warning("Seed/refresh failed (may already be seeded): %s", exc)
 
     # ── Production warmup: preload every singleton so NO request pays a cold
     #    start. Loads reranker, builds/verifies the RAG index, creates the Groq

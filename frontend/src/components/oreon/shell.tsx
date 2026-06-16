@@ -35,6 +35,9 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { ASSET_DISPLAY_NAMES } from "@/lib/oreon-data";
 
+// Restore the persisted sidebar-collapse preference exactly once per app load (see Shell).
+let sidebarHydrated = false;
+
 /** Render a header title, styling any "OREON" occurrence as the silver wordmark. */
 function renderBrandTitle(title: string) {
   if (!title.includes("OREON")) return title;
@@ -399,6 +402,17 @@ export function Shell({ children, title, subtitle }: { children: ReactNode; titl
   /* ── Sidebar collapse state ── */
   const sidebarCollapsed = useOREONContext((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useOREONContext((s) => s.setSidebarCollapsed);
+
+  // Restore the saved collapse preference after mount. The store initializes to a
+  // deterministic default so the first client render matches the server (no hydration
+  // mismatch); we apply localStorage here, once, on the first Shell to mount.
+  useEffect(() => {
+    if (sidebarHydrated) return;
+    sidebarHydrated = true;
+    if (typeof window !== "undefined" && localStorage.getItem("oreon-sidebar-collapsed") === "true") {
+      setSidebarCollapsed(true);
+    }
+  }, [setSidebarCollapsed]);
 
   return (
     <div className="h-screen flex bg-background text-foreground overflow-hidden">
