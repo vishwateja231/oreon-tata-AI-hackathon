@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { voiceApi, type VoiceConverseResponse, type VoiceTurn } from "@/lib/api/voice";
+import { API_BASE } from "@/lib/api/client";
 
 export type VoiceState = "idle" | "listening" | "thinking" | "speaking";
 
@@ -366,7 +367,7 @@ export function useVoiceAgent({ role, contextAssetId, currentPage, recentActivit
       setPhase("speaking");
       const env = startSpeakEnvelope();
       
-      const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const apiBase = API_BASE;
       const voiceParam = voiceModel ? `&voice=${encodeURIComponent(voiceModel)}` : "";
       const audioUrl = `${apiBase}/api/v1/voice/tts?text=${encodeURIComponent(text)}${voiceParam}`;
       const audio = new Audio(audioUrl);
@@ -643,7 +644,7 @@ export function useVoiceAgent({ role, contextAssetId, currentPage, recentActivit
           const formData = new FormData();
           formData.append("file", audioBlob, "audio.webm");
 
-          const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
+          const apiBase = API_BASE;
           const res = await fetch(`${apiBase}/api/v1/voice/stt`, {
             method: "POST",
             body: formData,

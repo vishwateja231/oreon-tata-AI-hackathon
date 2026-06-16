@@ -161,8 +161,8 @@ class SensorStreamService:
             
             # Recalculate health based on sensor levels (skipped when scripted —
             # the scenario controls health directly).
-            if not scripted:
-                # Threshold breaches
+            if not scripted and state.get("anomaly_type"):
+                # Threshold breaches during anomaly
                 if state["vibration"] > 8.5 or state["temperature"] > 92.0:
                     state["health_score"] = max(15.0, state["health_score"] - 1.5)
                 elif state["vibration"] > 6.0 or state["temperature"] > 82.0:

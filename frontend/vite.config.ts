@@ -13,4 +13,27 @@ export default defineConfig({
     server: { entry: "server" },
   },
   nitro: true,
+  vite: {
+    build: {
+      sourcemap: false,
+      cssMinify: true,
+      minify: "esbuild",
+      rollupOptions: {
+        maxParallelFileOps: 2,
+        output: {
+          manualChunks: (id) => {
+            if (id.includes("node_modules")) {
+              if (id.includes("three") || id.includes("@react-three")) {
+                return "three-bundle";
+              }
+              if (id.includes("lucide-react") || id.includes("recharts")) {
+                return "ui-heavy";
+              }
+              return "vendor";
+            }
+          }
+        }
+      }
+    }
+  }
 });

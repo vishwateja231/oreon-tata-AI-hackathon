@@ -9,9 +9,29 @@
  * Local dev:  set VITE_API_URL=http://localhost:8000 in frontend/.env.local
  * Production: leave unset — nginx handles /api/* → backend routing
  */
-export const API_BASE: string =
-  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ??
-  "";
+const buildTimeUrl = import.meta.env.VITE_API_URL;
+
+function resolveApiBase(): string {
+  if (buildTimeUrl !== undefined && buildTimeUrl !== null && buildTimeUrl !== "") {
+    return buildTimeUrl.replace(/\/$/, "");
+  }
+
+  if (typeof window === "undefined") {
+    // Server-side (SSR) environment
+    const serverUrl = typeof process !== "undefined"
+      ? (process.env.VITE_API_URL || process.env.API_URL)
+      : undefined;
+    return serverUrl ? serverUrl.replace(/\/$/, "") : "http://localhost:8000";
+  }
+
+  // Client-side environment
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return "http://localhost:8000";
+  }
+  return "";
+}
+
+export const API_BASE: string = resolveApiBase();
 
 const V1 = `${API_BASE}/api/v1`;
 

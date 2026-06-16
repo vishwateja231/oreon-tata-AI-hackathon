@@ -185,7 +185,13 @@ function Twin() {
     return from && to ? [{ from, to }] : [];
   }), [assets, graphQuery.data]);
 
-  const downstreamList = useMemo(() => new Set<string>(), []);
+  const downstreamList = useMemo(() => {
+    if (!selected) return new Set<string>();
+    return getDownstreamReachable(
+      selected.id,
+      edges.map((e) => ({ from: e.from.id, to: e.to.id }))
+    );
+  }, [selected, edges]);
 
   useEffect(() => { const el = containerRef.current; if (!el) return; const update = () => setSvgSize({ w: el.clientWidth, h: el.clientHeight }); update(); const ro = new ResizeObserver(update); ro.observe(el); return () => ro.disconnect(); }, []);
   useEffect(() => { const svg = svgRef.current; if (!svg) return; const onWheel = (e: WheelEvent) => { e.preventDefault(); const rect = svg.getBoundingClientRect(); const mx = e.clientX - rect.left, my = e.clientY - rect.top; const f = e.deltaY < 0 ? 1.12 : 1 / 1.12; setVt(p => { const ns = Math.max(0.25, Math.min(6, p.scale * f)); return { scale: ns, tx: mx - (mx - p.tx) * (ns / p.scale), ty: my - (my - p.ty) * (ns / p.scale) }; }); }; svg.addEventListener("wheel", onWheel, { passive: false }); return () => svg.removeEventListener("wheel", onWheel); }, []);

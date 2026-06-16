@@ -59,16 +59,16 @@ _DEFAULT_PROFILE = "bearing_failure"
 # Curated presentation baselines: a believable plant (mostly healthy, two degraded
 # assets, one critical "story" asset to investigate). Used by reset_plant().
 _PRESENTATION_BASELINES: dict[str, dict[str, Any]] = {
-    "BlastFurnace_BF2":  {"health": 87, "rul": 90,  "fp": 0.12},
-    "RollingMill_RM1":   {"health": 84, "rul": 75,  "fp": 0.16},
-    "Conveyor_C7":       {"health": 89, "rul": 110, "fp": 0.10},
-    "CoolingSystem_C1":  {"health": 72, "rul": 45,  "fp": 0.34},
-    "Motor_M12":         {"health": 81, "rul": 60,  "fp": 0.21},
-    "Pump_P3":           {"health": 68, "rul": 38,  "fp": 0.38},
-    "Fan_F2":            {"health": 92, "rul": 180, "fp": 0.08},
-    "Crusher_CR1":       {"health": 88, "rul": 120, "fp": 0.11},
-    "DustCollector_DC1": {"health": 95, "rul": 270, "fp": 0.05},
-    "Gearbox_G1":        {"health": 46, "rul": 14,  "fp": 0.74},
+    "BlastFurnace_BF2":  {"health": 94, "rul": 130, "fp": 0.05},
+    "RollingMill_RM1":   {"health": 90, "rul": 110, "fp": 0.08},
+    "Conveyor_C7":       {"health": 75, "rul": 55,  "fp": 0.28},
+    "CoolingSystem_C1":  {"health": 92, "rul": 120, "fp": 0.06},
+    "Motor_M12":         {"health": 24, "rul": 5,   "fp": 0.85},
+    "Pump_P3":           {"health": 96, "rul": 150, "fp": 0.04},
+    "Fan_F2":            {"health": 82, "rul": 80,  "fp": 0.15},
+    "Crusher_CR1":       {"health": 62, "rul": 35,  "fp": 0.45},
+    "DustCollector_DC1": {"health": 64, "rul": 40,  "fp": 0.42},
+    "Gearbox_G1":        {"health": 31, "rul": 10,  "fp": 0.72},
 }
 
 

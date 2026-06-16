@@ -885,7 +885,7 @@ const PipeRun = memo(
         <group position={center} rotation={[0, yaw, 0]}>
           {/* main connecting pipe — tinted to the link's status colour and softly lit so
               the connections read clearly against the dark floor */}
-          <Cylinder args={[0.12, 0.12, len, 12]} rotation={[0, 0, Math.PI / 2]}>
+          <Cylinder args={[0.12, 0.12, len, 12]} rotation={[0, 0, Math.PI / 2]} frustumCulled={false}>
             <meshStandardMaterial
               color={active ? "#f43f5e" : color}
               emissive={active ? "#f43f5e" : color}
@@ -895,7 +895,7 @@ const PipeRun = memo(
             />
           </Cylinder>
           {/* secondary rack pipe for industrial detail */}
-          <Cylinder args={[0.06, 0.06, len, 8]} position={[0, 0.16, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <Cylinder args={[0.06, 0.06, len, 8]} position={[0, 0.16, 0]} rotation={[0, 0, Math.PI / 2]} frustumCulled={false}>
             <meshStandardMaterial {...MAT.steel} />
           </Cylinder>
           {/* supports down to the floor */}
@@ -911,7 +911,7 @@ const PipeRun = memo(
         </group>
         {/* flow pulses gliding along the rod */}
         {dots.slice(0, dotCount).map((r, i) => (
-          <mesh key={i} ref={r}>
+          <mesh key={i} ref={r} frustumCulled={false}>
             <sphereGeometry args={[active ? 0.16 : 0.1, 10, 10]} />
             <meshBasicMaterial color={active ? "#ff5e74" : color} transparent depthWrite={false} />
           </mesh>
