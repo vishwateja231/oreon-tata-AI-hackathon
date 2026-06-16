@@ -23,11 +23,12 @@ export default defineConfig({
         output: {
           manualChunks: (id) => {
             if (id.includes("node_modules")) {
-              if (id.includes("three") || id.includes("@react-three")) {
+              if (
+                id.includes("three") ||
+                id.includes("@react-three") ||
+                id.includes("@splinetool")
+              ) {
                 return "three-bundle";
-              }
-              if (id.includes("lucide-react") || id.includes("recharts")) {
-                return "ui-heavy";
               }
               return "vendor";
             }

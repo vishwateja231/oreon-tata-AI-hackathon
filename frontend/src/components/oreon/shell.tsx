@@ -24,11 +24,12 @@ import {
   Lock,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { useDashboard, useActiveRole, useRoleConfig } from "@/lib/api/hooks";
 import { AskPalette, useAskPalette } from "@/components/oreon/ask-palette";
 import { SectionErrorBoundary } from "@/components/oreon/error-boundary";
-import { VoiceDashboard } from "@/components/oreon/voice-agent/VoiceDashboard";
+
+const VoiceDashboard = lazy(() => import("@/components/oreon/voice-agent/VoiceDashboard").then((m) => ({ default: m.VoiceDashboard })));
 import { OreonWord } from "@/components/oreon/oreon-word";
 import { useOREONContext } from "@/lib/context-store";
 import { useQueryClient } from "@tanstack/react-query";
@@ -712,7 +713,11 @@ export function Shell({ children, title, subtitle }: { children: ReactNode; titl
       </div>
 
       {/* Autonomous voice agent — hide on ask page (mic is integrated into chat input there) */}
-      {pathname !== "/twin" && pathname !== "/app/ask" && <VoiceDashboard />}
+      {pathname !== "/twin" && pathname !== "/app/ask" && (
+        <Suspense fallback={null}>
+          <VoiceDashboard />
+        </Suspense>
+      )}
     </div>
   );
 }
