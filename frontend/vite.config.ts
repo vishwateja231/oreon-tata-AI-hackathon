@@ -20,20 +20,6 @@ export default defineConfig({
       minify: "esbuild",
       rollupOptions: {
         maxParallelFileOps: 2,
-        output: {
-          manualChunks: (id) => {
-            if (id.includes("node_modules")) {
-              if (
-                id.includes("three") ||
-                id.includes("@react-three") ||
-                id.includes("@splinetool")
-              ) {
-                return "three-bundle";
-              }
-              return "vendor";
-            }
-          }
-        }
       }
     }
   }
