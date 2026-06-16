@@ -20,11 +20,14 @@ class PlantGraphService:
         self._load_graph()
 
     def _load_graph(self) -> None:
-        settings = get_settings()
-        graph_path = Path(settings.DATA_DIR) / "plant_graph.json"
+        # Load plant_graph.json relative to this file to avoid DATA_DIR configuration issues in production
+        graph_path = Path(__file__).resolve().parents[2] / "data" / "plant_graph.json"
         if not graph_path.exists():
-            return
-        with graph_path.open() as f:
+            settings = get_settings()
+            graph_path = Path(settings.DATA_DIR) / "plant_graph.json"
+            if not graph_path.exists():
+                return
+        with graph_path.open(encoding="utf-8") as f:
             data = json.load(f)
 
         for node in data.get("nodes", []):
