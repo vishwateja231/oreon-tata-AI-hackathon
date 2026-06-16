@@ -231,6 +231,9 @@ def health_check() -> dict:
 @app.get("/diagnostics", tags=["Health"])
 def diagnostics() -> dict:
     """System diagnostics — AI readiness, DB connectivity, and RAG index status."""
+    from pathlib import Path
+    import os
+
     result: dict = {
         "service": settings.APP_NAME,
         "version": settings.APP_VERSION,
@@ -240,6 +243,9 @@ def diagnostics() -> dict:
         "db": "unknown",
         "asset_count": 0,
         "rag": {"manuals_indexed": False, "sops_indexed": False, "semantic_embeddings": False},
+        "data_dir": settings.DATA_DIR,
+        "data_dir_exists": Path(settings.DATA_DIR).exists(),
+        "files_in_data_dir": os.listdir(settings.DATA_DIR) if Path(settings.DATA_DIR).exists() else [],
     }
 
     # OpenRouter reachability check
