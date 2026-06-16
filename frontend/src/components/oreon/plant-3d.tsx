@@ -859,12 +859,20 @@ function PipeRun({ from, to, color, active }: { from: [number, number, number]; 
   return (
     <group>
       <group position={center} rotation={[0, yaw, 0]}>
-        {/* twin pipes on a rack */}
-        <Cylinder args={[0.07, 0.07, len, 8]} rotation={[0, 0, Math.PI / 2]}>
-          <meshStandardMaterial {...(active ? { color: "#7a2733", roughness: 0.4, metalness: 0.7 } : MAT.steel)} />
+        {/* main connecting pipe — tinted to the link's status colour and softly lit so
+            the connections read clearly against the dark floor */}
+        <Cylinder args={[0.12, 0.12, len, 12]} rotation={[0, 0, Math.PI / 2]}>
+          <meshStandardMaterial
+            color={active ? "#f43f5e" : color}
+            emissive={active ? "#f43f5e" : color}
+            emissiveIntensity={active ? 0.65 : 0.35}
+            roughness={0.35}
+            metalness={0.6}
+          />
         </Cylinder>
-        <Cylinder args={[0.045, 0.045, len, 8]} position={[0, 0.14, 0]} rotation={[0, 0, Math.PI / 2]}>
-          <meshStandardMaterial {...MAT.paintDark} />
+        {/* secondary rack pipe for industrial detail */}
+        <Cylinder args={[0.06, 0.06, len, 8]} position={[0, 0.16, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <meshStandardMaterial {...MAT.steel} />
         </Cylinder>
         {/* supports down to the floor */}
         {Array.from({ length: nSupports }).map((_, i) => {
@@ -877,11 +885,11 @@ function PipeRun({ from, to, color, active }: { from: [number, number, number]; 
           );
         })}
       </group>
-      {/* flow pulses */}
+      {/* flow pulses gliding along the rod */}
       {dots.slice(0, dotCount).map((r, i) => (
         <mesh key={i} ref={r}>
-          <sphereGeometry args={[active ? 0.11 : 0.06, 8, 8]} />
-          <meshBasicMaterial color={active ? "#f43f5e" : color} transparent depthWrite={false} />
+          <sphereGeometry args={[active ? 0.16 : 0.1, 10, 10]} />
+          <meshBasicMaterial color={active ? "#ff5e74" : color} transparent depthWrite={false} />
         </mesh>
       ))}
     </group>
