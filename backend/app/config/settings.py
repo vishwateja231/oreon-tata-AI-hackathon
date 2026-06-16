@@ -100,6 +100,20 @@ class Settings(BaseSettings):
                 return True
         return value
 
+    @field_validator("DATA_DIR", mode="after")
+    @classmethod
+    def validate_data_dir(cls, value: str) -> str:
+        """Fallback to default relative data directory if path does not exist."""
+        default_path = Path(__file__).resolve().parents[2] / "data"
+        try:
+            if not Path(value).exists():
+                if default_path.exists():
+                    return str(default_path)
+        except Exception:
+            if default_path.exists():
+                return str(default_path)
+        return value
+
 
 @lru_cache
 def get_settings() -> Settings:
