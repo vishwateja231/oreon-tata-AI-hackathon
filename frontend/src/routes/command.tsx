@@ -7,6 +7,7 @@ import { Shell, PanelHeader } from "@/components/oreon/shell";
 import { useDashboard, useIncidents, useAlerts, useActiveRole, useEscalations, useReadAlert, useResolveEscalation, useRoleConfig, useSpares, useAssets, useBusinessRisks, useSentinelStatus, useSentinelStats, useSentinelTimeline } from "@/lib/api/hooks";
 import { useSensorStream } from "@/lib/api/use-sensor-stream";
 import { ASSET_DISPLAY_NAMES } from "@/lib/oreon-data";
+import { OreonWord } from "@/components/oreon/oreon-word";
 
 export const Route = createFileRoute("/command")({
   head: () => ({ meta: [{ title: "Command Center — OREON" }, { name: "description", content: "Plant-wide operational intelligence." }] }),
@@ -1606,26 +1607,36 @@ function Command() {
         </div>
 
         {/* ASK OREON INLINE — Enter sends the question straight into the chat */}
-        <div
-          className="w-full h-14 rounded-lg border border-border bg-surface-1 hover:bg-surface-2/60 hover:border-violet/30 transition-colors flex items-center gap-3 px-4 cursor-text"
-        >
-          <Sparkles className="size-4 text-violet" strokeWidth={1.5} />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") askInChat(q);
-            }}
-            placeholder="Ask OREON about any asset, incident, or trend…"
-            className="flex-1 bg-transparent outline-none text-[14px] placeholder:text-text-muted"
-          />
-          <button
-            onClick={() => askInChat(q)}
-            disabled={!q.trim()}
-            className="font-mono text-[10px] uppercase tracking-wide h-7 px-3 rounded bg-violet/15 text-violet border border-violet/30 hover:bg-violet/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        <div className="relative mb-2 z-20 pointer-events-auto">
+          <div
+            onClick={() => document.getElementById("ask-oreon-input")?.focus()}
+            className="w-full h-[60px] rounded-lg border border-violet/30 bg-[#0c0d12] hover:bg-surface-1 transition-colors flex items-center gap-4 px-4 cursor-text"
           >
-            Ask →
-          </button>
+            <div className="flex items-center gap-3 shrink-0 border-r border-border/60 pr-4 py-1 pointer-events-none">
+               <img src="/logo.png" alt="OREON Logo" className="size-6 object-contain" />
+               <span className="font-mono font-bold tracking-tight text-[16px] mr-1"><OreonWord /></span>
+            </div>
+            <input
+              id="ask-oreon-input"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") askInChat(q);
+              }}
+              placeholder="Ask about any asset, incident, or trend…"
+              className="flex-1 bg-transparent outline-none text-[15px] placeholder:text-text-muted/70 text-foreground pointer-events-auto"
+            />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                askInChat(q);
+              }}
+              disabled={!q.trim()}
+              className="font-mono text-[11px] uppercase tracking-wide h-9 px-5 rounded-md bg-violet/90 text-white hover:bg-violet hover:shadow-[0_0_12px_rgba(139,92,246,0.5)] disabled:bg-surface-2 disabled:text-text-muted disabled:border disabled:border-border disabled:shadow-none disabled:cursor-not-allowed transition-all duration-300 flex items-center gap-2 font-bold pointer-events-auto"
+            >
+              Ask <ArrowRight className="size-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* SENTINEL INTELLIGENCE PANEL */}

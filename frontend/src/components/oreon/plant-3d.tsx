@@ -1,5 +1,5 @@
-import { useMemo, useRef } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { useMemo, useRef, useEffect, memo } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   OrbitControls, Html, Grid, Box, Cylinder, Cone, Torus, Sphere,
   ContactShadows, MeshReflectorMaterial, Environment, Lightformer,
@@ -72,7 +72,7 @@ const MAT = {
 } as const;
 
 /* ─── Atmospheric dust ─── */
-function DustParticles() {
+const DustParticles = memo(function DustParticles() {
   const count = 200;
   const ref = useRef<THREE.Points>(null);
   const positions = useMemo(() => {
@@ -84,21 +84,22 @@ function DustParticles() {
     }
     return arr;
   }, []);
+  const positionArgs = useMemo(() => [positions, 3] as [THREE.BufferAttribute["array"], number], [positions]);
   useFrame(({ clock }) => {
     if (ref.current) ref.current.rotation.y = clock.getElapsedTime() * 0.012;
   });
   return (
     <points ref={ref}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-position" args={positionArgs} />
       </bufferGeometry>
       <pointsMaterial size={0.045} color="#4b5563" transparent opacity={0.3} sizeAttenuation depthWrite={false} />
     </points>
   );
-}
+});
 
 /* ─── Rising particle column (embers / steam / smoke) ─── */
-function RisingParticles({
+const RisingParticles = memo(function RisingParticles({
   count = 24, radius = 0.5, height = 3.2, color, size = 0.09, opacity = 0.7, speed = 1, drift = 0.12,
   position = [0, 0, 0] as [number, number, number],
 }: {
@@ -119,6 +120,8 @@ function RisingParticles({
     }
     return { pos, vel };
   }, [count, radius, height]);
+
+  const positionArgs = useMemo(() => [seeds.pos.slice(), 3] as [THREE.BufferAttribute["array"], number], [seeds.pos]);
 
   useFrame((_, delta) => {
     if (!ref.current) return;
@@ -141,15 +144,15 @@ function RisingParticles({
   return (
     <points ref={ref} position={position}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[seeds.pos.slice(), 3]} />
+        <bufferAttribute attach="attributes-position" args={positionArgs} />
       </bufferGeometry>
       <pointsMaterial size={size} color={color} transparent opacity={opacity} sizeAttenuation depthWrite={false} />
     </points>
   );
-}
+});
 
 /* ─── Flickering furnace fire light ─── */
-function FurnaceLight({ position }: { position: [number, number, number] }) {
+const FurnaceLight = memo(function FurnaceLight({ position }: { position: [number, number, number] }) {
   const ref = useRef<THREE.PointLight>(null);
   useFrame(({ clock }) => {
     if (!ref.current) return;
@@ -157,11 +160,11 @@ function FurnaceLight({ position }: { position: [number, number, number] }) {
     ref.current.intensity = 1.4 + Math.sin(t * 7.3) * 0.3 + Math.sin(t * 13.7) * 0.2;
   });
   return <pointLight ref={ref} position={position} color="#fb923c" distance={8} decay={2} />;
-}
+}, (prev, next) => prev.position[0] === next.position[0] && prev.position[1] === next.position[1] && prev.position[2] === next.position[2]);
 
 /* ═══════════════════════ MACHINE MODELS (base sits at local y=0.35, on plinth) ═══════════════════════ */
 
-function BlastFurnaceGeo() {
+const BlastFurnaceGeo = memo(function BlastFurnaceGeo() {
   return (
     <group position={[0, 0.35, 0]}>
       {/* support legs */}
@@ -245,9 +248,9 @@ function BlastFurnaceGeo() {
       <RisingParticles position={[0, 8.0, 0]} count={14} radius={0.45} height={4.5} color="#5b6470" size={0.5} opacity={0.12} speed={0.65} />
     </group>
   );
-}
+});
 
-function CoolingTowerGeo() {
+const CoolingTowerGeo = memo(function CoolingTowerGeo() {
   const shellPts = useMemo(() => {
     const arr: THREE.Vector2[] = [];
     for (let i = 0; i <= 18; i++) {
@@ -289,9 +292,9 @@ function CoolingTowerGeo() {
       <RisingParticles position={[0, 6.4, 0]} count={26} radius={0.9} height={3.8} color="#cbd5e1" size={0.55} opacity={0.12} speed={0.8} drift={0.3} />
     </group>
   );
-}
+});
 
-function ConveyorGeo() {
+const ConveyorGeo = memo(function ConveyorGeo() {
   const lumps = useRef<THREE.Group>(null);
   const pulleys = [useRef<THREE.Mesh>(null), useRef<THREE.Mesh>(null)];
   useFrame(({ clock }, delta) => {
@@ -350,9 +353,9 @@ function ConveyorGeo() {
       ))}
     </group>
   );
-}
+});
 
-function RollingMillGeo() {
+const RollingMillGeo = memo(function RollingMillGeo() {
   const rolls = [useRef<THREE.Mesh>(null), useRef<THREE.Mesh>(null)];
   const slab = useRef<THREE.Mesh>(null);
   useFrame(({ clock }, delta) => {
@@ -391,9 +394,9 @@ function RollingMillGeo() {
       </Box>
     </group>
   );
-}
+});
 
-function PumpGeo() {
+const PumpGeo = memo(function PumpGeo() {
   const shaft = useRef<THREE.Mesh>(null);
   useFrame((_, delta) => { if (shaft.current) shaft.current.rotation.y += delta * 6; });
   return (
@@ -423,9 +426,9 @@ function PumpGeo() {
       <Torus args={[0.22, 0.045, 8, 16]} position={[0.85, 1.75, 0]} rotation={[Math.PI / 2, 0, 0]}><meshStandardMaterial {...MAT.yellow} /></Torus>
     </group>
   );
-}
+});
 
-function FanGeo() {
+const FanGeo = memo(function FanGeo() {
   const hub = useRef<THREE.Group>(null);
   const shaft = useRef<THREE.Mesh>(null);
   useFrame((_, delta) => {
@@ -477,9 +480,9 @@ function FanGeo() {
       <Box args={[0.7, 0.85, 0.7]} position={[0.7, 0.7, -1.15]}><meshStandardMaterial {...MAT.dark} /></Box>
     </group>
   );
-}
+});
 
-function GearboxGeo() {
+const GearboxGeo = memo(function GearboxGeo() {
   const inS = useRef<THREE.Mesh>(null);
   const outS = useRef<THREE.Mesh>(null);
   useFrame((_, delta) => {
@@ -507,9 +510,9 @@ function GearboxGeo() {
       <Cylinder args={[0.07, 0.07, 0.2, 8]} position={[0.3, 2.05, 0]}><meshStandardMaterial {...MAT.steel} /></Cylinder>
     </group>
   );
-}
+});
 
-function CrusherGeo() {
+const CrusherGeo = memo(function CrusherGeo() {
   const cone = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {
     if (!cone.current) return;
@@ -549,9 +552,9 @@ function CrusherGeo() {
       <RisingParticles position={[0, 3.6, 0]} count={10} radius={0.9} height={1.1} color="#8d8478" size={0.25} opacity={0.1} speed={0.45} />
     </group>
   );
-}
+});
 
-function DustCollectorGeo() {
+const DustCollectorGeo = memo(function DustCollectorGeo() {
   return (
     <group position={[0, 0.35, 0]}>
       {/* legs */}
@@ -590,9 +593,9 @@ function DustCollectorGeo() {
       <Cylinder args={[0.03, 0.03, 3.6, 6]} position={[1.28, 2.2, 0.25]}><meshStandardMaterial {...MAT.yellow} /></Cylinder>
     </group>
   );
-}
+});
 
-function MotorGeo() {
+const MotorGeo = memo(function MotorGeo() {
   const shaft = useRef<THREE.Mesh>(null);
   useFrame((_, delta) => { if (shaft.current) shaft.current.rotation.y += delta * 7; });
   return (
@@ -619,7 +622,7 @@ function MotorGeo() {
       <Box args={[0.4, 0.32, 0.45]} position={[0.2, 1.6, 0]}><meshStandardMaterial {...MAT.dark} /></Box>
     </group>
   );
-}
+});
 
 const MACHINE_HEIGHTS: Record<string, number> = {
   "blast furnace": 8.6, "cooling system": 6.8, "rolling mill": 4.2, "conveyor": 2.6,
@@ -631,7 +634,7 @@ function machineHeight(type: string): number {
   return 2.6;
 }
 
-function MachineModel({ type }: { type: string }) {
+const MachineModel = memo(function MachineModel({ type }: { type: string }) {
   const t = type.toLowerCase();
   if (t.includes("furnace")) return <BlastFurnaceGeo />;
   if (t.includes("cooling")) return <CoolingTowerGeo />;
@@ -643,12 +646,12 @@ function MachineModel({ type }: { type: string }) {
   if (t.includes("crusher")) return <CrusherGeo />;
   if (t.includes("dust") || t.includes("collector")) return <DustCollectorGeo />;
   return <MotorGeo />;
-}
+});
 
 /* ═══════════════════════ STATUS ACCENTS (small, on the ground / a stanchion) ═══════════════════════ */
 
 /* Concrete plinth with a thin status light-ring inset around it */
-function Plinth({ color, health }: { color: string; health: number }) {
+const Plinth = memo(function Plinth({ color, health }: { color: string; health: number }) {
   const ringRef = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
     if (!ringRef.current) return;
@@ -670,10 +673,10 @@ function Plinth({ color, health }: { color: string; health: number }) {
       </mesh>
     </group>
   );
-}
+});
 
 /* Status stanchion: small industrial signal post beside the machine */
-function StatusStanchion({ color, critical }: { color: string; critical: boolean }) {
+const StatusStanchion = memo(function StatusStanchion({ color, critical }: { color: string; critical: boolean }) {
   const lampRef = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
     if (!lampRef.current) return;
@@ -694,10 +697,10 @@ function StatusStanchion({ color, critical }: { color: string; critical: boolean
       </Cylinder>
     </group>
   );
-}
+});
 
 /* Expanding alert ring on the floor for critical assets */
-function Shockwave({ color }: { color: string }) {
+const Shockwave = memo(function Shockwave({ color }: { color: string }) {
   const ref = useRef<THREE.Mesh>(null);
   useFrame(({ clock }) => {
     if (!ref.current) return;
@@ -711,7 +714,7 @@ function Shockwave({ color }: { color: string }) {
       <meshBasicMaterial color={color} transparent depthWrite={false} />
     </mesh>
   );
-}
+});
 
 /* ─── Per-mode metric badge rendered inside each node label ─── */
 function getModeMetric(asset: any, mode: string) {
@@ -783,143 +786,187 @@ function getModeMetric(asset: any, mode: string) {
 }
 
 /* ─── Node: machine + plinth + status accents + label ─── */
-function Node({ asset, position, color, isSelected, isDownstream, mode, onClick }: any) {
-  const selRing = useRef<THREE.Mesh>(null);
-  const isCritical = asset.status === "critical";
-  const isTargeted = mode === "propagation" ? (isSelected || isDownstream) : true;
-  const h = machineHeight(asset.type);
+const Node = memo(
+  function Node({ asset, position, color, isSelected, isDownstream, mode, onClick }: any) {
+    const selRing = useRef<THREE.Mesh>(null);
+    const isCritical = asset.status === "critical";
+    const isTargeted = mode === "propagation" ? (isSelected || isDownstream) : true;
+    const h = machineHeight(asset.type);
 
-  useFrame(({ clock }) => {
-    if (selRing.current && isSelected) selRing.current.rotation.z = clock.getElapsedTime() * 0.45;
-  });
+    useFrame(({ clock }) => {
+      if (selRing.current && isSelected) selRing.current.rotation.z = clock.getElapsedTime() * 0.45;
+    });
 
-  return (
-    <group position={position} onClick={(e: any) => { e.stopPropagation(); onClick(asset); }}>
-      <MachineModel type={asset.type} />
-      <Plinth color={color} health={asset.health} />
-      <StatusStanchion color={color} critical={isCritical} />
-      {isCritical && <Shockwave color={color} />}
+    return (
+      <group position={position} onClick={(e: any) => { e.stopPropagation(); onClick(asset); }}>
+        <MachineModel type={asset.type} />
+        <Plinth color={color} health={asset.health} />
+        <StatusStanchion color={color} critical={isCritical} />
+        {isCritical && <Shockwave color={color} />}
 
-      {isSelected && (
-        <mesh ref={selRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
-          <torusGeometry args={[3.05, 0.035, 10, 72]} />
-          <meshBasicMaterial color={color} transparent opacity={0.85} depthWrite={false} />
-        </mesh>
-      )}
+        {isSelected && (
+          <mesh ref={selRing} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+            <torusGeometry args={[3.05, 0.035, 10, 72]} />
+            <meshBasicMaterial color={color} transparent opacity={0.85} depthWrite={false} />
+          </mesh>
+        )}
 
-      {/* annotation label above the machine */}
-      <Html position={[0, h + 0.9, 0]} center zIndexRange={[100, 0]} distanceFactor={22}>
-        <div className={`pointer-events-none whitespace-nowrap transition-opacity duration-200 ${isTargeted ? "opacity-100" : "opacity-15"}`}>
-          <div className={`px-2.5 py-1.5 rounded-md text-center backdrop-blur-md ${
-            isSelected
-              ? "bg-[#0c0c12]/95 border border-[color:var(--primary)]/50"
-              : "bg-[#08080c]/80 border border-white/[0.08]"
-          }`}>
-            <div className="font-mono text-[8.5px] font-semibold tracking-[0.12em] uppercase leading-none" style={{ color }}>
-              {asset.name}
+        {/* annotation label above the machine */}
+        <Html position={[0, h + 0.9, 0]} center zIndexRange={[100, 0]} distanceFactor={22}>
+          <div className={`pointer-events-none whitespace-nowrap transition-opacity duration-200 ${isTargeted ? "opacity-100" : "opacity-15"}`}>
+            <div className={`px-2.5 py-1.5 rounded-md text-center backdrop-blur-md ${
+              isSelected
+                ? "bg-[#0c0c12]/95 border border-[color:var(--primary)]/50"
+                : "bg-[#08080c]/80 border border-white/[0.08]"
+            }`}>
+              <div className="font-mono text-[8.5px] font-semibold tracking-[0.12em] uppercase leading-none" style={{ color }}>
+                {asset.name}
+              </div>
+              {getModeMetric(asset, mode)}
             </div>
-            {getModeMetric(asset, mode)}
+            {/* leader line */}
+            <div className="mx-auto w-px h-3 bg-white/15" />
           </div>
-          {/* leader line */}
-          <div className="mx-auto w-px h-3 bg-white/15" />
-        </div>
-      </Html>
-    </group>
-  );
-}
+        </Html>
+      </group>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.isSelected === next.isSelected &&
+      prev.isDownstream === next.isDownstream &&
+      prev.color === next.color &&
+      prev.mode === next.mode &&
+      prev.onClick === next.onClick &&
+      prev.position[0] === next.position[0] &&
+      prev.position[1] === next.position[1] &&
+      prev.position[2] === next.position[2] &&
+      prev.asset.id === next.asset.id &&
+      prev.asset.name === next.asset.name &&
+      prev.asset.health === next.asset.health &&
+      prev.asset.status === next.asset.status &&
+      prev.asset.risk === next.asset.risk &&
+      prev.asset.rul === next.asset.rul
+    );
+  }
+);
 
 /* ─── Pipe run between assets, with material-flow pulses ─── */
-function PipeRun({ from, to, color, active }: { from: [number, number, number]; to: [number, number, number]; color: string; active: boolean }) {
-  const dots = [useRef<THREE.Mesh>(null), useRef<THREE.Mesh>(null), useRef<THREE.Mesh>(null)];
-  const { center, yaw, len, a, b } = useMemo(() => {
-    const av = new THREE.Vector3(from[0], FLOOR_Y + 0.42, from[2]);
-    const bv = new THREE.Vector3(to[0], FLOOR_Y + 0.42, to[2]);
-    const d = bv.clone().sub(av);
-    return {
-      a: av, b: bv,
-      center: av.clone().add(bv).multiplyScalar(0.5),
-      yaw: -Math.atan2(d.z, d.x),
-      len: d.length(),
-    };
-  }, [from, to]);
+const PipeRun = memo(
+  function PipeRun({ from, to, color, active }: { from: [number, number, number]; to: [number, number, number]; color: string; active: boolean }) {
+    const dots = [useRef<THREE.Mesh>(null), useRef<THREE.Mesh>(null), useRef<THREE.Mesh>(null)];
+    const { center, yaw, len, a, b } = useMemo(() => {
+      const av = new THREE.Vector3(from[0], FLOOR_Y + 0.42, from[2]);
+      const bv = new THREE.Vector3(to[0], FLOOR_Y + 0.42, to[2]);
+      const d = bv.clone().sub(av);
+      return {
+        a: av, b: bv,
+        center: av.clone().add(bv).multiplyScalar(0.5),
+        yaw: -Math.atan2(d.z, d.x),
+        len: d.length(),
+      };
+    }, [from, to]);
 
-  useFrame(({ clock }) => {
-    const speed = active ? 0.4 : 0.12;
-    dots.forEach((r, i) => {
-      if (!r.current) return;
-      const t = (clock.getElapsedTime() * speed + i / 3) % 1;
-      r.current.position.lerpVectors(a, b, t);
-      r.current.position.y += 0.12;
-      (r.current.material as THREE.MeshBasicMaterial).opacity = (active ? 0.95 : 0.45) * Math.sin(t * Math.PI);
+    useFrame(({ clock }) => {
+      const speed = active ? 0.4 : 0.12;
+      dots.forEach((r, i) => {
+        if (!r.current) return;
+        const t = (clock.getElapsedTime() * speed + i / 3) % 1;
+        r.current.position.lerpVectors(a, b, t);
+        r.current.position.y += 0.12;
+        (r.current.material as THREE.MeshBasicMaterial).opacity = (active ? 0.95 : 0.45) * Math.sin(t * Math.PI);
+      });
     });
-  });
 
-  const nSupports = Math.max(1, Math.floor(len / 2.6));
-  const dotCount = active ? 3 : 1;
-  return (
-    <group>
-      <group position={center} rotation={[0, yaw, 0]}>
-        {/* main connecting pipe — tinted to the link's status colour and softly lit so
-            the connections read clearly against the dark floor */}
-        <Cylinder args={[0.12, 0.12, len, 12]} rotation={[0, 0, Math.PI / 2]}>
-          <meshStandardMaterial
-            color={active ? "#f43f5e" : color}
-            emissive={active ? "#f43f5e" : color}
-            emissiveIntensity={active ? 0.65 : 0.35}
-            roughness={0.35}
-            metalness={0.6}
-          />
-        </Cylinder>
-        {/* secondary rack pipe for industrial detail */}
-        <Cylinder args={[0.06, 0.06, len, 8]} position={[0, 0.16, 0]} rotation={[0, 0, Math.PI / 2]}>
-          <meshStandardMaterial {...MAT.steel} />
-        </Cylinder>
-        {/* supports down to the floor */}
-        {Array.from({ length: nSupports }).map((_, i) => {
-          const x = -len / 2 + (len / (nSupports + 1)) * (i + 1);
-          return (
-            <group key={i} position={[x, -0.21, 0]}>
-              <Box args={[0.06, 0.42, 0.06]}><meshStandardMaterial {...MAT.dark} /></Box>
-              <Box args={[0.3, 0.05, 0.3]} position={[0, -0.21, 0]}><meshStandardMaterial {...MAT.dark} /></Box>
-            </group>
-          );
-        })}
+    const nSupports = Math.max(1, Math.floor(len / 2.6));
+    const dotCount = active ? 3 : 1;
+    return (
+      <group>
+        <group position={center} rotation={[0, yaw, 0]}>
+          {/* main connecting pipe — tinted to the link's status colour and softly lit so
+              the connections read clearly against the dark floor */}
+          <Cylinder args={[0.12, 0.12, len, 12]} rotation={[0, 0, Math.PI / 2]}>
+            <meshStandardMaterial
+              color={active ? "#f43f5e" : color}
+              emissive={active ? "#f43f5e" : color}
+              emissiveIntensity={active ? 0.65 : 0.35}
+              roughness={0.35}
+              metalness={0.6}
+            />
+          </Cylinder>
+          {/* secondary rack pipe for industrial detail */}
+          <Cylinder args={[0.06, 0.06, len, 8]} position={[0, 0.16, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <meshStandardMaterial {...MAT.steel} />
+          </Cylinder>
+          {/* supports down to the floor */}
+          {Array.from({ length: nSupports }).map((_, i) => {
+            const x = -len / 2 + (len / (nSupports + 1)) * (i + 1);
+            return (
+              <group key={i} position={[x, -0.21, 0]}>
+                <Box args={[0.06, 0.42, 0.06]}><meshStandardMaterial {...MAT.dark} /></Box>
+                <Box args={[0.3, 0.05, 0.3]} position={[0, -0.21, 0]}><meshStandardMaterial {...MAT.dark} /></Box>
+              </group>
+            );
+          })}
+        </group>
+        {/* flow pulses gliding along the rod */}
+        {dots.slice(0, dotCount).map((r, i) => (
+          <mesh key={i} ref={r}>
+            <sphereGeometry args={[active ? 0.16 : 0.1, 10, 10]} />
+            <meshBasicMaterial color={active ? "#ff5e74" : color} transparent depthWrite={false} />
+          </mesh>
+        ))}
       </group>
-      {/* flow pulses gliding along the rod */}
-      {dots.slice(0, dotCount).map((r, i) => (
-        <mesh key={i} ref={r}>
-          <sphereGeometry args={[active ? 0.16 : 0.1, 10, 10]} />
-          <meshBasicMaterial color={active ? "#ff5e74" : color} transparent depthWrite={false} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.active === next.active &&
+      prev.color === next.color &&
+      prev.from[0] === next.from[0] &&
+      prev.from[1] === next.from[1] &&
+      prev.from[2] === next.from[2] &&
+      prev.to[0] === next.to[0] &&
+      prev.to[1] === next.to[1] &&
+      prev.to[2] === next.to[2]
+    );
+  }
+);
 
 /* ─── Background skyline: distant chimneys + plant buildings ─── */
-function FarChimney({ position, height = 14 }: { position: [number, number, number]; height?: number }) {
-  const lamp = useRef<THREE.Mesh>(null);
-  const phase = useMemo(() => Math.random() * Math.PI * 2, []);
-  useFrame(({ clock }) => {
-    if (!lamp.current) return;
-    (lamp.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
-      Math.sin(clock.getElapsedTime() * 1.5 + phase) > 0 ? 2.5 : 0.2;
-  });
-  return (
-    <group position={position}>
-      <Cylinder args={[0.55, 0.85, height, 12]} position={[0, height / 2, 0]}>
-        <meshStandardMaterial color="#12161d" roughness={0.8} metalness={0.3} />
-      </Cylinder>
-      <mesh ref={lamp} position={[0, height + 0.2, 0]}>
-        <sphereGeometry args={[0.12, 8, 8]} />
-        <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={2} />
-      </mesh>
-      <RisingParticles position={[0, height + 0.3, 0]} count={10} radius={0.5} height={5} color="#3f4854" size={0.8} opacity={0.07} speed={0.5} drift={0.4} />
-    </group>
-  );
-}
+const FarChimney = memo(
+  function FarChimney({ position, height = 14 }: { position: [number, number, number]; height?: number }) {
+    const lamp = useRef<THREE.Mesh>(null);
+    const phase = useMemo(() => Math.random() * Math.PI * 2, []);
+    useFrame(({ clock }) => {
+      if (!lamp.current) return;
+      (lamp.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
+        Math.sin(clock.getElapsedTime() * 1.5 + phase) > 0 ? 2.5 : 0.2;
+    });
+    return (
+      <group position={position}>
+        <Cylinder args={[0.55, 0.85, height, 12]} position={[0, height / 2, 0]}>
+          <meshStandardMaterial color="#12161d" roughness={0.8} metalness={0.3} />
+        </Cylinder>
+        <mesh ref={lamp} position={[0, height + 0.2, 0]}>
+          <sphereGeometry args={[0.12, 8, 8]} />
+          <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={2} />
+        </mesh>
+        <RisingParticles position={[0, height + 0.3, 0]} count={10} radius={0.5} height={5} color="#3f4854" size={0.8} opacity={0.07} speed={0.5} drift={0.4} />
+      </group>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.height === next.height &&
+      prev.position[0] === next.position[0] &&
+      prev.position[1] === next.position[1] &&
+      prev.position[2] === next.position[2]
+    );
+  }
+);
 
-function Backdrop() {
+const Backdrop = memo(function Backdrop() {
   return (
     <group position={[0, FLOOR_Y, 0]}>
       {/* long mill building */}
@@ -946,10 +993,10 @@ function Backdrop() {
       <FarChimney position={[26, 0, -26]} height={13} />
     </group>
   );
-}
+});
 
 /* ─── Floor: wet concrete reflector + faint grid + lane markings ─── */
-function PlantFloor() {
+const PlantFloor = memo(function PlantFloor() {
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y - 0.02, 0]}>
@@ -977,22 +1024,34 @@ function PlantFloor() {
         sectionSize={4}
         cellSize={1}
       />
-      {/* yellow aisle lane markings */}
-      {[8.5, -8.5].map((z) => (
-        <mesh key={z} rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y + 0.005, z]}>
-          <planeGeometry args={[52, 0.16]} />
-          <meshStandardMaterial color="#6b5618" roughness={0.95} metalness={0} transparent opacity={0.7} />
-        </mesh>
-      ))}
-      {[-14, 14].map((x) => (
-        <mesh key={x} rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[x, FLOOR_Y + 0.005, 0]}>
-          <planeGeometry args={[24, 0.16]} />
-          <meshStandardMaterial color="#6b5618" roughness={0.95} metalness={0} transparent opacity={0.7} />
-        </mesh>
-      ))}
     </group>
   );
+});
+
+function ContextLossHandler() {
+  const { gl } = useThree();
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const handleContextLost = (e: Event) => {
+      e.preventDefault();
+      console.warn("WebGL Renderer context lost. Prevented default to allow restoration.");
+    };
+    const handleContextRestored = () => {
+      console.log("WebGL Renderer context successfully restored.");
+    };
+    canvas.addEventListener("webglcontextlost", handleContextLost);
+    canvas.addEventListener("webglcontextrestored", handleContextRestored);
+    return () => {
+      canvas.removeEventListener("webglcontextlost", handleContextLost);
+      canvas.removeEventListener("webglcontextrestored", handleContextRestored);
+    };
+  }, [gl]);
+  return null;
 }
+
+const CAMERA_CONFIG = { position: [-12, 13, 30] as [number, number, number], fov: 40 };
+const DPR_CONFIG = [1, 1.5] as [number, number];
+const GL_CONFIG = { antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.15 };
 
 /* ─── Main Export ─── */
 export function Plant3D({ assets, edges, mode, selected, onSelect, downstreamList }: any) {
@@ -1008,11 +1067,12 @@ export function Plant3D({ assets, edges, mode, selected, onSelect, downstreamLis
 
   return (
     <Canvas
-      camera={{ position: [-12, 13, 30], fov: 40 }}
-      dpr={[1, 1.5]}
-      shadows
-      gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.15 }}
+      camera={CAMERA_CONFIG}
+      dpr={DPR_CONFIG}
+      shadows="percentage"
+      gl={GL_CONFIG}
     >
+      <ContextLossHandler />
       <color attach="background" args={["#05060a"]} />
       <fog attach="fog" args={["#05060a", 48, 100]} />
 
